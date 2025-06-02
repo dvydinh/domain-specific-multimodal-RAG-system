@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+eggs/
+*.egg
+.eggs/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Environment variables
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data artifacts
+data/images/
+data/raw/*.pdf
+*.pdf
+
+# Model cache
+models/
+.cache/
+
+# Logs
+*.log
+logs/
+
+# Node
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Qdrant snapshots
+qdrant_storage/
+
+# Neo4j
+neo4j_data/
+
+# Jupyter
+.ipynb_checkpoints/
