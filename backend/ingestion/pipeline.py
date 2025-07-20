@@ -136,7 +136,9 @@ class IngestionPipeline:
         stats["text_vectors"] = text_count
 
         # Image vectors
-        image_metadata = self._collect_image_metadata(pages, pdf_name, recipe_id_map)
+        image_metadata = self._collect_image_metadata(
+            pages, pdf_name, recipe_id_map, all_chunks
+        )
         image_count = self.vector_store.embed_and_store_images(
             image_metadata, recipe_id_map
         )
@@ -185,13 +187,8 @@ class IngestionPipeline:
     def _chunk_pages(
         self, pages: list[PageContent], pdf_name: str
     ) -> list[ChunkMetadata]:
-        """Convert extracted pages into text chunks."""
-        page_dicts = [
-            {"text": p.text, "page_number": p.page_number}
-            for p in pages
-            if p.text.strip()
-        ]
-        return self.chunker.chunk_pages(page_dicts, source_pdf=pdf_name)
+        """Convert extracted pages into text chunks, preserving blocks for bbox."""
+        return self.chunker.chunk_pages(pages, source_pdf=pdf_name)
 
     def _assign_recipe_names(
         self,
@@ -214,16 +211,28 @@ class IngestionPipeline:
         pages: list[PageContent],
         pdf_name: str,
         recipe_id_map: dict[str, str],
+        chunks: list[ChunkMetadata],
     ) -> list[ImageMetadata]:
-        """Collect image metadata from extracted pages."""
+        """Collect image metadata from extracted pages and map to recipes via chunks."""
         images: list[ImageMetadata] = []
 
+        # Build mapping from page_number to a set of recipe_names found on that page
+        page_to_recipes = {}
+        for chunk in chunks:
+            if chunk.recipe_name and chunk.recipe_name in recipe_id_map:
+                page_to_recipes.setdefault(chunk.page_number, set()).add(chunk.recipe_name)
+
         for page in pages:
+            # Best-effort: map images to the dominant recipe on the page
+            page_recipes = list(page_to_recipes.get(page.page_number, set()))
+            recipe_name = page_recipes[0] if page_recipes else None
+
             for img_path in page.image_paths:
                 images.append(ImageMetadata(
                     image_path=img_path,
                     source_pdf=pdf_name,
                     page_number=page.page_number,
+                    recipe_name=recipe_name,
                 ))
 
         return images

@@ -9,6 +9,7 @@ recipe IDs that match hard constraints (ingredients, tags, exclusions).
 import logging
 from typing import Optional
 
+import asyncio
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from neo4j import GraphDatabase, Driver
@@ -107,20 +108,14 @@ class GraphRetriever:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.close()
 
-    def retrieve(self, query: str) -> list[dict]:
+    async def aretrieve(self, query: str) -> list[dict]:
         """
-        Retrieve recipes matching the query constraints.
+        Retrieve recipes matching the query constraints asynchronously.
 
         Flow: NL query → LLM → Cypher → Neo4j → Results
-
-        Args:
-            query: Natural language query with constraints.
-
-        Returns:
-            List of dicts with recipe id, name, and metadata.
         """
         # Step 1: Generate Cypher query
-        cypher = self._generate_cypher(query)
+        cypher = await self._generate_cypher(query)
         if not cypher:
             logger.warning("Failed to generate Cypher query")
             return []
@@ -129,22 +124,22 @@ class GraphRetriever:
 
         # Step 2: Execute against Neo4j
         try:
-            results = self._execute_cypher(cypher)
+            results = await self._execute_cypher(cypher)
             logger.info(f"Graph retrieval returned {len(results)} recipes")
             return results
         except Exception as e:
             logger.error(f"Cypher execution failed: {e}")
             logger.info("Falling back to simple text search in graph")
-            return self._fallback_search(query)
+            return await self._fallback_search(query)
 
-    def _generate_cypher(self, query: str) -> str:
-        """Generate a Cypher query from natural language using LLM."""
+    async def _generate_cypher(self, query: str) -> str:
+        """Generate a Cypher query from natural language using LLM asynchronously."""
         messages = [
             SystemMessage(content=CYPHER_GENERATION_PROMPT),
             HumanMessage(content=f"Generate a Cypher query for: {query}"),
         ]
 
-        response = self.llm.invoke(messages)
+        response = await self.llm.ainvoke(messages)
         cypher = response.content.strip()
 
         # Clean up common LLM formatting artifacts
@@ -157,55 +152,60 @@ class GraphRetriever:
 
         return cypher.strip()
 
-    def _execute_cypher(self, cypher: str) -> list[dict]:
-        """Execute a Cypher query and return results."""
-        with self._driver.session() as session:
-            result = session.run(cypher)
-            records = [dict(record) for record in result]
-        return records
+    async def _execute_cypher(self, cypher: str) -> list[dict]:
+        """Execute a Cypher query and return results (running neo4j in a thread)."""
+        def _run():
+            with self._driver.session() as session:
+                result = session.run(cypher)
+                return [dict(record) for record in result]
+        return await asyncio.to_thread(_run)
 
-    def _fallback_search(self, query: str) -> list[dict]:
+    async def _fallback_search(self, query: str) -> list[dict]:
         """
         Simple fallback: search recipe names when Cypher generation fails.
         """
         search_term = query.lower()
-        with self._driver.session() as session:
-            result = session.run(
-                """
-                MATCH (r:Recipe)
-                WHERE toLower(r.name) CONTAINS $term
-                   OR EXISTS {
-                       MATCH (r)-[:HAS_TAG]->(t:Tag)
-                       WHERE toLower(t.name) CONTAINS $term
-                   }
-                RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
-                LIMIT 20
-                """,
-                term=search_term,
-            )
-            return [dict(record) for record in result]
+        def _run():
+            with self._driver.session() as session:
+                result = session.run(
+                    """
+                    MATCH (r:Recipe)
+                    WHERE toLower(r.name) CONTAINS $term
+                       OR EXISTS {
+                           MATCH (r)-[:HAS_TAG]->(t:Tag)
+                           WHERE toLower(t.name) CONTAINS $term
+                       }
+                    RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
+                    LIMIT 20
+                    """,
+                    term=search_term,
+                )
+                return [dict(record) for record in result]
+        return await asyncio.to_thread(_run)
 
-    def get_recipe_details(self, recipe_id: str) -> dict:
+    async def a_get_recipe_details(self, recipe_id: str) -> dict:
         """
-        Get full details of a recipe including ingredients and tags.
+        Get full details of a recipe including ingredients and tags asynchronously.
         """
-        with self._driver.session() as session:
-            result = session.run(
-                """
-                MATCH (r:Recipe {id: $recipe_id})
-                OPTIONAL MATCH (r)-[rel:CONTAINS_INGREDIENT]->(i:Ingredient)
-                OPTIONAL MATCH (r)-[:HAS_TAG]->(t:Tag)
-                RETURN r.id AS id, r.name AS name, r.cuisine AS cuisine,
-                       COLLECT(DISTINCT {
-                           name: i.name,
-                           quantity: rel.quantity,
-                           unit: rel.unit
-                       }) AS ingredients,
-                       COLLECT(DISTINCT t.name) AS tags
-                """,
-                recipe_id=recipe_id,
-            )
-            record = result.single()
-            if record:
-                return dict(record)
-            return {}
+        def _run():
+            with self._driver.session() as session:
+                result = session.run(
+                    """
+                    MATCH (r:Recipe {id: $recipe_id})
+                    OPTIONAL MATCH (r)-[rel:CONTAINS_INGREDIENT]->(i:Ingredient)
+                    OPTIONAL MATCH (r)-[:HAS_TAG]->(t:Tag)
+                    RETURN r.id AS id, r.name AS name, r.cuisine AS cuisine,
+                           COLLECT(DISTINCT {
+                               name: i.name,
+                               quantity: rel.quantity,
+                               unit: rel.unit
+                           }) AS ingredients,
+                           COLLECT(DISTINCT t.name) AS tags
+                    """,
+                    recipe_id=recipe_id,
+                )
+                record = result.single()
+                if record:
+                    return dict(record)
+                return {}
+        return await asyncio.to_thread(_run)

@@ -41,9 +41,9 @@ retrieved context to produce a faithful answer.
 
 ---
 
-## 2. GraphRAG — Why Vector Search Alone Fails
+## 2. Constraint-Based Knowledge Graph Filtering — Why Vector Search Alone Fails
 
-**Reference**: Microsoft Research GraphRAG architecture, Neo4j GraphRAG patterns
+**Reference**: Neo4j Graph Filtering techniques (Note: This is strictly Constraint-based Filtering, NOT Microsoft's GraphRAG which requires hierarchical Leiden clustering).
 
 ### The Blind Spots of Pure Vector RAG
 
@@ -109,6 +109,12 @@ Qdrant uses HNSW as its primary indexing algorithm. The key ideas:
 | `m` | 16 | Max connections per node in the graph. Higher = better recall, more memory |
 | `ef_construct` | 100 | Build-time search depth. Higher = better index quality, slower build |
 | `ef` (query-time) | 128 | Search-time depth. Higher = better recall, slower query |
+
+### RAM Consumption Math (Capacity Planning)
+For production scale, Qdrant's HNSW vector index memory footprint can be calculated as:
+`Memory = N_vectors * (dim * 4 + M * 4) * 1.5`
+For 50 million text vectors (dim=1024, M=16):
+`RAM = 50,000,000 * (1024 * 4 + 16 * 4) * 1.5 = 50M * (4096 + 64) * 1.5 = ~312 GB`
 
 ### Why This Matters for Our Project
 

@@ -53,13 +53,13 @@ class ResponseSynthesizer:
             max_tokens=2000,
         )
 
-    def synthesize(self, query: str, retrieval_results: dict) -> QueryResponse:
+    async def asynthesize(self, query: str, retrieval_results: dict) -> QueryResponse:
         """
-        Generate a response with citations from retrieval results.
+        Generate a response with citations from retrieval results asynchronously.
 
         Args:
             query: Original user question.
-            retrieval_results: Output from HybridRetriever.retrieve().
+            retrieval_results: Output from HybridRetriever.aretrieve().
 
         Returns:
             QueryResponse with response text, citations, and metadata.
@@ -91,7 +91,7 @@ class ResponseSynthesizer:
         ]
 
         try:
-            response = self.llm.invoke(messages)
+            response = await self.llm.ainvoke(messages)
             response_text = response.content.strip()
         except Exception as e:
             logger.error(f"LLM synthesis failed: {e}")
@@ -179,6 +179,7 @@ class ResponseSynthesizer:
                 image_url=image_url,
                 source_pdf=result.get("source_pdf"),
                 page_number=result.get("page_number"),
+                bbox=result.get("bbox"),
             )
             citation_idx += 1
 

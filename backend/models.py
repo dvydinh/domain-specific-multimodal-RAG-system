@@ -50,6 +50,7 @@ class ChunkMetadata(BaseModel):
     source_pdf: str
     page_number: int
     chunk_index: int
+    bbox: Optional[tuple[float, float, float, float]] = Field(None, description="Bounding box [x0, y0, x1, y1]")
     recipe_name: Optional[str] = None
     neo4j_recipe_id: Optional[str] = None
 
@@ -91,6 +92,7 @@ class Citation(BaseModel):
     image_url: Optional[str] = Field(None, description="URL to the source image")
     source_pdf: Optional[str] = None
     page_number: Optional[int] = None
+    bbox: Optional[tuple[float, float, float, float]] = Field(None, description="Bounding box [x0, y0, x1, y1]")
 
 
 class QueryResponse(BaseModel):

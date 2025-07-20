@@ -37,3 +37,8 @@ tenacity==8.4.2
 # === Testing ===
 pytest==8.2.2
 pytest-asyncio==0.23.7
+ragas==0.1.20 # Added for evaluation
+datasets==2.20.0 # Added for evaluation
+
+# === NLP / Splitting ===
+langchain-text-splitters==0.2.2

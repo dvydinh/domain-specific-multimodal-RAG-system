@@ -8,6 +8,7 @@ optionally filtered by recipe IDs from the graph retriever.
 import logging
 from typing import Optional
 
+import asyncio
 from backend.ingestion.vector_store import VectorStoreManager
 
 logger = logging.getLogger(__name__)
@@ -28,28 +29,20 @@ class VectorRetriever:
     def __init__(self, vector_store: Optional[VectorStoreManager] = None):
         self.vector_store = vector_store or VectorStoreManager()
 
-    def retrieve_text(
+    async def aretrieve_text(
         self,
         query: str,
         top_k: int = 5,
         recipe_ids: Optional[list[str]] = None,
     ) -> list[dict]:
         """
-        Retrieve relevant text chunks via semantic search.
-
-        Args:
-            query: Natural language query.
-            top_k: Maximum results to return.
-            recipe_ids: If provided, restricts search to these recipe IDs only.
-                        This is the key mechanism for graph-filtered vector search.
-
-        Returns:
-            List of results with text, score, and metadata.
+        Retrieve relevant text chunks via semantic search asynchronously.
         """
-        results = self.vector_store.search_text(
-            query=query,
-            top_k=top_k,
-            recipe_ids=recipe_ids,
+        results = await asyncio.to_thread(
+            self.vector_store.search_text,
+            query,
+            top_k,
+            recipe_ids,
         )
 
         if recipe_ids:
@@ -62,33 +55,26 @@ class VectorRetriever:
 
         return results
 
-    def retrieve_images(
+    async def aretrieve_images(
         self,
         query: str,
         top_k: int = 3,
         recipe_ids: Optional[list[str]] = None,
     ) -> list[dict]:
         """
-        Retrieve relevant recipe images via CLIP text-to-image search.
-
-        Args:
-            query: Natural language description.
-            top_k: Maximum results.
-            recipe_ids: Optional filter by recipe IDs.
-
-        Returns:
-            List of image results with paths and scores.
+        Retrieve relevant recipe images via CLIP text-to-image search asynchronously.
         """
-        results = self.vector_store.search_images(
-            query=query,
-            top_k=top_k,
-            recipe_ids=recipe_ids,
+        results = await asyncio.to_thread(
+            self.vector_store.search_images,
+            query,
+            top_k,
+            recipe_ids,
         )
 
         logger.info(f"Vector image search: {len(results)} results")
         return results
 
-    def retrieve_all(
+    async def aretrieve_all(
         self,
         query: str,
         top_k_text: int = 5,
@@ -97,31 +83,28 @@ class VectorRetriever:
         include_images: bool = True,
     ) -> dict:
         """
-        Combined text + image retrieval.
-
-        Args:
-            query: Natural language query.
-            top_k_text: Number of text results.
-            top_k_images: Number of image results.
-            recipe_ids: Optional recipe ID filter from graph retriever.
-            include_images: Whether to also search for images.
-
-        Returns:
-            Dict with 'text_results' and 'image_results' lists.
+        Combined text + image retrieval asynchronously.
         """
-        text_results = self.retrieve_text(
-            query=query,
-            top_k=top_k_text,
-            recipe_ids=recipe_ids,
-        )
-
-        image_results = []
-        if include_images:
-            image_results = self.retrieve_images(
+        text_results_task = asyncio.create_task(
+            self.aretrieve_text(
                 query=query,
-                top_k=top_k_images,
+                top_k=top_k_text,
                 recipe_ids=recipe_ids,
             )
+        )
+
+        image_results_task = None
+        if include_images:
+            image_results_task = asyncio.create_task(
+                self.aretrieve_images(
+                    query=query,
+                    top_k=top_k_images,
+                    recipe_ids=recipe_ids,
+                )
+            )
+
+        text_results = await text_results_task
+        image_results = await image_results_task if image_results_task else []
 
         return {
             "text_results": text_results,
