@@ -11,6 +11,7 @@ precision of the knowledge graph with the semantic understanding of
 vector search to eliminate hallucination while maintaining rich results.
 """
 
+import asyncio
 import logging
 from typing import Optional
 
@@ -41,30 +42,27 @@ class HybridRetriever:
         self.graph_retriever = graph_retriever or GraphRetriever()
         self.vector_retriever = vector_retriever or VectorRetriever()
 
-    def retrieve(
+    async def aretrieve(
         self,
         query: str,
         top_k: int = 5,
         include_images: bool = True,
     ) -> dict:
         """
-        Execute the full hybrid retrieval pipeline.
-
-        Args:
-            query: User's natural language question.
-            top_k: Number of text results to return.
-            include_images: Whether to include image results.
-
-        Returns:
-            Dict containing:
-              - query_type: How the query was routed
-              - graph_results: Recipe metadata from graph (if applicable)
-              - text_results: Semantic text chunks from vector search
-              - image_results: Image results from vector search
-              - recipe_ids: IDs of recipes that matched graph constraints
+        Execute the full hybrid retrieval pipeline asynchronously.
+        Runs Router and Graph Retriever concurrently to minimize latency.
         """
-        # === Step 1: Route the query ===
-        routing = self.router.route_with_analysis(query)
+        logger.info(f"Starting async hybrid retrieval for: '{query}'")
+
+        # === Step 1 & 2: Route and Graph Retrieval (Concurrent) ===
+        # The Graph retrieval only fails if the query doesn't match the required graph format,
+        # but the LLM-to-Cypher isn't intrinsically dependent on the router's output.
+        # We run them concurrently to hide the router latency.
+        router_task = asyncio.create_task(self.router.aroute_with_analysis(query))
+        graph_task = asyncio.create_task(self.graph_retriever.aretrieve(query))
+
+        # Wait for router first
+        routing = await router_task
         query_type = QueryType(routing["query_type"])
         logger.info(f"Query type: {query_type.value} | Features: {routing['features']}")
 
@@ -76,11 +74,11 @@ class HybridRetriever:
             "recipe_ids": [],
         }
 
-        # === Step 2: Graph retrieval (if needed) ===
         recipe_ids = None
+
         if query_type in (QueryType.GRAPH_ONLY, QueryType.HYBRID):
-            logger.info("[Step 2] Executing graph retrieval...")
-            graph_results = self.graph_retriever.retrieve(query)
+            # We need graph results, wait for it
+            graph_results = await graph_task
             result["graph_results"] = graph_results
             recipe_ids = [r.get("id") for r in graph_results if r.get("id")]
             result["recipe_ids"] = recipe_ids
@@ -91,31 +89,69 @@ class HybridRetriever:
                 logger.warning("Graph returned no results, expanding to vector-only")
                 query_type = QueryType.VECTOR_ONLY
                 recipe_ids = None
+        else:
+            # We don't need graph results. Cancel it to free resources.
+            graph_task.cancel()
 
         # === Step 3: Vector retrieval ===
         if query_type in (QueryType.VECTOR_ONLY, QueryType.HYBRID):
             logger.info("[Step 3] Executing vector retrieval...")
-            vector_results = self.vector_retriever.retrieve_all(
+            # Fetch more candidates if hybrid for re-ranking
+            fetch_k = top_k * 2 if query_type == QueryType.HYBRID else top_k
+            
+            vector_results = await self.vector_retriever.aretrieve_all(
                 query=query,
-                top_k_text=top_k,
+                top_k_text=fetch_k,
                 top_k_images=3 if include_images else 0,
                 recipe_ids=recipe_ids,  # None for VECTOR_ONLY, filtered for HYBRID
                 include_images=include_images,
             )
-            result["text_results"] = vector_results["text_results"]
+            
+            text_results = vector_results["text_results"]
+            
+            if query_type == QueryType.HYBRID and result["graph_results"]:
+                logger.info("  → Applying Reciprocal Rank Fusion (RRF) scoring...")
+                # Map neo4j_recipe_id to its rank in graph search
+                graph_ranks = {}
+                for idx, g_res in enumerate(result["graph_results"]):
+                    r_id = g_res.get("id")
+                    if r_id:
+                        graph_ranks[r_id] = idx + 1
+                        
+                K = 60
+                for v_idx, text_res in enumerate(text_results):
+                    v_rank = v_idx + 1
+                    g_rank = graph_ranks.get(text_res.get("neo4j_recipe_id"), float('inf'))
+                    
+                    # Compute RRF score
+                    rrf_score = 1.0 / (K + v_rank)
+                    if g_rank != float('inf'):
+                        rrf_score += 1.0 / (K + g_rank)
+                        
+                    text_res["rrf_score"] = rrf_score
+                    
+                # Sort by RRF and truncate
+                text_results.sort(key=lambda x: x.get("rrf_score", 0), reverse=True)
+            
+            # Truncate to top_k
+            result["text_results"] = text_results[:top_k]
             result["image_results"] = vector_results["image_results"]
 
             logger.info(
-                f"  → Vector returned {len(result['text_results'])} text, "
+                f"  → Vector/RRF returned {len(result['text_results'])} text, "
                 f"{len(result['image_results'])} image results"
             )
 
         elif query_type == QueryType.GRAPH_ONLY:
             # For graph-only queries, still fetch recipe details from graph
             logger.info("[Step 3] Graph-only mode, enriching with recipe details...")
-            for recipe in result["graph_results"]:
-                if recipe.get("id"):
-                    details = self.graph_retriever.get_recipe_details(recipe["id"])
+            enrichment_tasks = [
+                self.graph_retriever.a_get_recipe_details(recipe["id"])
+                for recipe in result["graph_results"] if recipe.get("id")
+            ]
+            if enrichment_tasks:
+                details_list = await asyncio.gather(*enrichment_tasks)
+                for recipe, details in zip(result["graph_results"], details_list):
                     recipe.update(details)
 
         logger.info(

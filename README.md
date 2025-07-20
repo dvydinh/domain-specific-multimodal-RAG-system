@@ -1,6 +1,6 @@
 # Domain-Specific Multimodal RAG System
 
-A hybrid Retrieval-Augmented Generation system combining **Neo4j Knowledge Graph** and **Qdrant Vector Database** for accurate, hallucination-resistant multimodal querying over a cooking/nutrition corpus.
+A hybrid Retrieval-Augmented Generation system combining **Constraint-based Knowledge Graph Filtering** (Neo4j) and **Vector Database** (Qdrant) with **Reciprocal Rank Fusion (RRF)** for accurate, hallucination-resistant multimodal querying over a cooking/nutrition corpus. Note: This implements Constraint-based Graph Filtering and is distinct from community-summarization approaches like Microsoft's GraphRAG.
 
 ## Architecture
 
@@ -196,9 +196,13 @@ Response:
 
 The system routes constraint-heavy queries through Neo4j **first**, collecting a set of valid recipe IDs. These IDs are then used as a Qdrant payload filter, constraining the vector search space. This eliminates false positives from embedding similarity (e.g., "without pork" matching pork recipes).
 
-### HNSW Tuning
+### HNSW Tuning & Memory Math
 
 Qdrant collections use `m=16, ef_construct=100` for the HNSW index. This provides strong recall (>95%) while keeping search latency under 10ms for collections up to 100K vectors.
+
+**Physical RAM required for 50 million text vectors (BGE-M3 dims=1024):**
+Memory = N_vectors * (dim * 4 + M * 4) * 1.5 
+`RAM = 50,000,000 * (1024 * 4 + 16 * 4) * 1.5 = ~312 GB`
 
 ### LLM Entity Extraction
 

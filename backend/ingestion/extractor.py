@@ -17,10 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass
+class TextBlock:
+    """A block of text with its bounding box coordinates."""
+    text: str
+    bbox: tuple[float, float, float, float]
+
+
+@dataclass
 class PageContent:
     """Extracted content from a single PDF page."""
     page_number: int
     text: str
+    blocks: list[TextBlock] = field(default_factory=list)
     image_paths: list[str] = field(default_factory=list)
 
 
@@ -61,8 +69,20 @@ class PDFExtractor:
             page = doc[page_idx]
             page_num = page_idx + 1
 
-            # --- Extract text ---
-            text = page.get_text("text").strip()
+            # --- Extract text and blocks ---
+            blocks = []
+            full_text = []
+            for b in page.get_text("blocks"):
+                if b[6] == 0:  # Text block
+                    block_text = b[4].strip()
+                    if block_text:
+                        blocks.append(TextBlock(
+                            text=block_text,
+                            bbox=(b[0], b[1], b[2], b[3])
+                        ))
+                        full_text.append(block_text)
+            
+            text = "\n\n".join(full_text)
 
             # --- Extract images ---
             image_paths = self._extract_images(page, pdf_name, page_num)
@@ -71,6 +91,7 @@ class PDFExtractor:
                 pages.append(PageContent(
                     page_number=page_num,
                     text=text,
+                    blocks=blocks,
                     image_paths=image_paths,
                 ))
 

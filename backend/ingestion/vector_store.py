@@ -175,6 +175,7 @@ class VectorStoreManager:
                     "source_pdf": chunk.source_pdf,
                     "page_number": chunk.page_number,
                     "chunk_index": chunk.chunk_index,
+                    "bbox": chunk.bbox,
                 },
             )
             points.append(point)
@@ -309,6 +310,7 @@ class VectorStoreManager:
                 "neo4j_recipe_id": hit.payload.get("neo4j_recipe_id", ""),
                 "source_pdf": hit.payload.get("source_pdf", ""),
                 "page_number": hit.payload.get("page_number", 0),
+                "bbox": hit.payload.get("bbox", None),
             }
             for hit in results
         ]

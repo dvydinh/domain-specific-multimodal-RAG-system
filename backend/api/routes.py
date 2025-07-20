@@ -80,15 +80,15 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
         retriever = _get_retriever()
         synthesizer = _get_synthesizer()
 
-        # Step 1-3: Hybrid retrieval
-        retrieval_results = retriever.retrieve(
+        # Step 1-3: Hybrid retrieval (Async)
+        retrieval_results = await retriever.aretrieve(
             query=request.question,
             top_k=request.top_k,
             include_images=request.include_images,
         )
 
-        # Step 4: LLM synthesis with citations
-        response = synthesizer.synthesize(
+        # Step 4: LLM synthesis with citations (Async)
+        response = await synthesizer.asynthesize(
             query=request.question,
             retrieval_results=retrieval_results,
         )

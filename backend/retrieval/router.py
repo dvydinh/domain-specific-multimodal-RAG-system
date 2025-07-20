@@ -71,9 +71,9 @@ class QueryRouter:
             max_tokens=20,
         )
 
-    def route(self, query: str) -> QueryType:
+    async def aroute(self, query: str) -> QueryType:
         """
-        Classify a query into a retrieval strategy.
+        Classify a query into a retrieval strategy asymptotically.
 
         Args:
             query: User's natural language question.
@@ -87,7 +87,7 @@ class QueryRouter:
         ]
 
         try:
-            response = self.llm.invoke(messages)
+            response = await self.llm.ainvoke(messages)
             classification = response.content.strip().upper()
 
             # Parse the LLM response
@@ -105,14 +105,14 @@ class QueryRouter:
             logger.warning(f"Router failed, defaulting to HYBRID: {e}")
             return QueryType.HYBRID
 
-    def route_with_analysis(self, query: str) -> dict:
+    async def aroute_with_analysis(self, query: str) -> dict:
         """
-        Route with additional analysis details.
+        Route with additional analysis details concurrently.
 
         Returns:
             Dict with query_type and detected features.
         """
-        query_type = self.route(query)
+        query_type = await self.aroute(query)
 
         # Simple heuristic analysis for logging/debugging
         query_lower = query.lower()

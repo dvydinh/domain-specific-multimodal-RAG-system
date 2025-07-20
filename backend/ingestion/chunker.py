@@ -1,27 +1,24 @@
 """
 Text chunking with configurable size and overlap.
 
-Implements character-level chunking with sentence-boundary awareness
-to avoid splitting mid-sentence when possible.
+Implements semantic chunking using Langchain's RecursiveCharacterTextSplitter
+to avoid splitting mid-sentence or mid-list when possible.
 """
 
 import logging
-import re
 from backend.models import ChunkMetadata
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 logger = logging.getLogger(__name__)
-
-# Regex for sentence boundaries (period, question mark, exclamation, newline)
-SENTENCE_BOUNDARY = re.compile(r'(?<=[.!?\n])\s+')
 
 
 class TextChunker:
     """
     Splits text into overlapping chunks for vector embedding.
 
-    The chunker tries to split at sentence boundaries. If a clean
-    sentence break is not found within the overlap region, it falls
-    back to character-level splitting.
+    The chunker uses RecursiveCharacterTextSplitter to split at semantic 
+    boundaries (paragraphs, newlines, spaces) to preserve structured data
+    like ingredients lists and tables.
 
     Args:
         chunk_size: Maximum characters per chunk (default 500).
@@ -35,6 +32,11 @@ class TextChunker:
             )
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", " ", ""]
+        )
 
     def chunk_text(
         self,
@@ -57,69 +59,24 @@ class TextChunker:
             return []
 
         text = text.strip()
+        splits = self.splitter.split_text(text)
+        
         chunks: list[ChunkMetadata] = []
-        start = 0
-        chunk_index = 0
-
-        while start < len(text):
-            end = start + self.chunk_size
-
-            if end >= len(text):
-                # Last chunk — take everything remaining
-                chunk_text = text[start:]
-            else:
-                # Try to find a sentence boundary near the end
-                chunk_text = text[start:end]
-                boundary = self._find_sentence_boundary(chunk_text)
-
-                if boundary is not None:
-                    # Split at the sentence boundary
-                    chunk_text = chunk_text[:boundary]
-                    end = start + boundary
-
-            chunk_text = chunk_text.strip()
+        for i, split in enumerate(splits):
+            chunk_text = split.strip()
             if chunk_text:
                 chunks.append(ChunkMetadata(
                     text=chunk_text,
                     source_pdf=source_pdf,
                     page_number=page_number,
-                    chunk_index=chunk_index,
+                    chunk_index=i,
                 ))
-                chunk_index += 1
-
-            if end >= len(text):
-                break
-
-            # Move start forward, accounting for overlap
-            start = end - self.chunk_overlap
 
         logger.debug(
             f"Chunked {len(text)} chars into {len(chunks)} chunks "
             f"(size={self.chunk_size}, overlap={self.chunk_overlap})"
         )
         return chunks
-
-    def _find_sentence_boundary(self, text: str) -> int | None:
-        """
-        Find the last sentence boundary in the text.
-        Searches in the last `chunk_overlap` characters for a clean split point.
-
-        Returns:
-            Character position of the boundary, or None if not found.
-        """
-        # Search in the tail region for a sentence boundary
-        search_start = max(0, len(text) - self.chunk_overlap)
-        search_region = text[search_start:]
-
-        # Find all sentence boundaries in the search region
-        boundaries = list(SENTENCE_BOUNDARY.finditer(search_region))
-
-        if boundaries:
-            # Use the last boundary found
-            last_boundary = boundaries[-1]
-            return search_start + last_boundary.start()
-
-        return None
 
     def chunk_pages(
         self,
@@ -137,13 +94,52 @@ class TextChunker:
             Combined list of ChunkMetadata across all pages.
         """
         all_chunks: list[ChunkMetadata] = []
+        chunk_idx_offset = 0
 
         for page in pages:
+            # Handle both PageContent objects and old dict format
+            page_text = page.text if hasattr(page, "text") else page.get("text", "")
+            page_number = page.page_number if hasattr(page, "page_number") else page.get("page_number", 0)
+            blocks = page.blocks if hasattr(page, "blocks") else []
+
+            if not page_text.strip():
+                continue
+
             page_chunks = self.chunk_text(
-                text=page.get("text", ""),
+                text=page_text,
                 source_pdf=source_pdf,
-                page_number=page.get("page_number", 0),
+                page_number=page_number,
             )
+            
+            # Map chunk bbox using blocks
+            for chunk in page_chunks:
+                chunk.chunk_index += chunk_idx_offset
+                
+                if blocks:
+                    min_x, min_y, max_x, max_y = float('inf'), float('inf'), float('-inf'), float('-inf')
+                    found_overlap = False
+                    
+                    # Split chunk text into words to find overlap
+                    chunk_words = set(chunk.text.lower().split())
+                    
+                    for b in blocks:
+                        block_words = set(b.text.lower().split())
+                        
+                        # If block is subset of chunk, or chunk is subset of block, or high word overlap
+                        if (b.text in chunk.text or chunk.text in b.text or 
+                            len(block_words & chunk_words) > 3): 
+                            
+                            found_overlap = True
+                            bx0, by0, bx1, by1 = b.bbox
+                            min_x = min(min_x, bx0)
+                            min_y = min(min_y, by0)
+                            max_x = max(max_x, bx1)
+                            max_y = max(max_y, by1)
+                            
+                    if found_overlap:
+                        chunk.bbox = (min_x, min_y, max_x, max_y)
+            
+            chunk_idx_offset += len(page_chunks)
             all_chunks.extend(page_chunks)
 
         logger.info(
