@@ -23,25 +23,26 @@ CYPHER_GENERATION_PROMPT = """You are a Cypher query expert for a Neo4j recipe d
 Schema:
 - Nodes: (:Recipe {id, name, cuisine, source_pdf, page_number})
 - Nodes: (:Ingredient {name})  — names are lowercase
-- Nodes: (:Tag {name})  — e.g., "Japanese", "Spicy", "Vegan", "Comfort Food"
+- Nodes: (:Tag {name})
 - Relationships: (:Recipe)-[:CONTAINS_INGREDIENT]->(:Ingredient)
 - Relationships: (:Recipe)-[:HAS_TAG]->(:Tag)
 
 Rules for generating Cypher:
 1. Always return r.id and r.name at minimum
-2. Use case-insensitive matching: toLower(x.name) CONTAINS toLower($param)
+2. Use case-insensitive matching: toLower(x.name) CONTAINS toLower('keyword')
 3. For exclusions ("without", "no"), use WHERE NOT pattern
 4. For inclusions, use MATCH pattern
 5. Return DISTINCT results
 6. Limit to 20 results unless specified otherwise
 7. Only output the Cypher query, no explanations
+8. CRITICAL: For relationship between Recipe and Ingredient, you MUST EXPLICITLY use `CONTAINS_INGREDIENT`. NEVER hallucinate relationship as `CONTAINS`. Example: `[:CONTAINS_INGREDIENT]` NOT `[:CONTAINS]`.
 
 Examples:
 
 Query: "Japanese recipes that are spicy"
 Cypher:
 MATCH (r:Recipe)-[:HAS_TAG]->(t1:Tag), (r)-[:HAS_TAG]->(t2:Tag)
-WHERE toLower(t1.name) = 'japanese' AND toLower(t2.name) = 'spicy'
+WHERE toLower(t1.name) CONTAINS 'japanese' AND toLower(t2.name) CONTAINS 'spicy'
 RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
 LIMIT 20
 
@@ -59,7 +60,7 @@ LIMIT 20
 Query: "Vegan recipes without nuts"
 Cypher:
 MATCH (r:Recipe)-[:HAS_TAG]->(t:Tag)
-WHERE toLower(t.name) = 'vegan'
+WHERE toLower(t.name) CONTAINS 'vegan'
 AND NOT EXISTS {
     MATCH (r)-[:CONTAINS_INGREDIENT]->(i:Ingredient)
     WHERE toLower(i.name) CONTAINS 'nut' OR toLower(i.name) CONTAINS 'almond'
