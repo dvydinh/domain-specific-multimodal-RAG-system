@@ -16,7 +16,14 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from neo4j import GraphDatabase, Driver
 
 from backend.config import get_settings
+from pydantic import BaseModel, Field
+import json
 
+class GraphQueryParams(BaseModel):
+    ingredients_include: list[str] = Field(default=[], description="List of ingredients to include")
+    ingredients_exclude: list[str] = Field(default=[], description="List of ingredients to exclude")
+    tags_include: list[str] = Field(default=[], description="List of tags to include")
+    tags_exclude: list[str] = Field(default=[], description="List of tags to exclude")
 logger = logging.getLogger(__name__)
 
 PARAMETER_EXTRACTION_PROMPT = """You are a search parameter extractor for a recipe database.
@@ -111,6 +118,17 @@ class GraphRetriever:
     )
     async def _generate_parameters(self, query: str) -> Optional[dict]:
         """Extract structured search parameters from natural language."""
+        from pydantic import BaseModel, ValidationError
+        from backend.utils.json_parser import extract_json
+
+        # Pydantic schema enforcement — guarantees output structure
+        class SearchParams(BaseModel):
+            include_ingredients: list[str] = []
+            exclude_ingredients: list[str] = []
+            tags: list[str] = []
+
+        _SAFE_DEFAULT = {"include_ingredients": [], "exclude_ingredients": [], "tags": []}
+
         messages = [
             SystemMessage(content=PARAMETER_EXTRACTION_PROMPT),
             HumanMessage(content=f"Extract parameters for: {query}"),
@@ -118,11 +136,19 @@ class GraphRetriever:
 
         try:
             response = await self.llm.ainvoke(messages)
-            text = response.content.strip()
-            # Handle markdown blocks if present
-            if text.startswith("```"):
-                text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
-            return json.loads(text)
+            raw = response.content.strip()
+
+            # Multi-layer JSON extraction (handles markdown fences, junk text, etc.)
+            parsed = extract_json(raw, fallback=_SAFE_DEFAULT)
+
+            # Pydantic validation — normalizes and enforces types
+            try:
+                validated = SearchParams(**parsed)
+                return validated.model_dump()
+            except ValidationError as ve:
+                logger.warning(f"Pydantic validation failed, using safe default: {ve}")
+                return _SAFE_DEFAULT
+
         except Exception as e:
             logger.error(f"Parameter extraction LLM call failed: {e}")
             return None

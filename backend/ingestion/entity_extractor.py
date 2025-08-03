@@ -97,17 +97,12 @@ class EntityExtractor:
         ]
 
         try:
-            # Use asyncio.to_thread for the synchronous invoke if ChatGoogleGenerativeAI 
-            # is blocking, or use ainvoke for native async.
             response = await self.llm.ainvoke(messages)
             raw_text = response.content
-            
-            # Clean JSON formatting
-            cleaned_json = raw_text.strip()
-            if cleaned_json.startswith("```"):
-                cleaned_json = re.sub(r"```(?:json)?", "", cleaned_json).replace("```", "").strip()
-            
-            data = json.loads(cleaned_json)
+
+            # Multi-layer defensive JSON extraction
+            from backend.utils.json_parser import extract_json
+            data = extract_json(raw_text, fallback={"recipes": []})
             return self._parse_result(data)
         except Exception as e:
             logger.error(f"LLM extraction failed: {e}")
