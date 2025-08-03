@@ -26,8 +26,8 @@ the user's question based SOLELY on the provided context. You must follow these 
 4. If the context contains recipe instructions, include them in a clear step-by-step format.
 5. If the context includes ingredients, list them with quantities.
 6. Be helpful, concise, and well-organized in your response.
-7. If the context is insufficient to answer the question, say so honestly.
-8. Write in the same language as the user's question (Vietnamese or English).
+7. CRITICAL RULE: If the context is empty '[]', irrelevant, or insufficient to answer the question, YOU MUST EXACTLY reply: 'Based on the provided documents, I cannot find this information.'. Do not invent any answers.
+8. Write in English.
 
 Format your response with clear sections when appropriate:
 - **Recipe Name**
@@ -69,8 +69,7 @@ class ResponseSynthesizer:
 
         if not context_parts:
             return QueryResponse(
-                response="I couldn't find any relevant information for your query. "
-                         "Please try rephrasing or adjusting your search criteria.",
+                response="Based on the provided documents, I cannot find this information.",
                 citations={},
                 query_type=retrieval_results.get("query_type", "hybrid"),
                 graph_results_count=len(retrieval_results.get("graph_results", [])),
