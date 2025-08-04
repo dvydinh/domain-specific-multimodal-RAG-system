@@ -12,9 +12,10 @@ import logging
 import asyncio
 import shutil
 from pathlib import Path
-
+from backend.ingestion.vector_store import VectorStoreManager
+from backend.ingestion.saga import SagaTransactionManager
 from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 
 from backend.config import get_settings
 from backend.models import QueryRequest, QueryResponse, RecipeSummary
@@ -41,6 +42,9 @@ def get_graph(request: Request) -> GraphBuilder:
 
 def get_vector_store(request: Request) -> VectorStoreManager:
     return request.app.state.vector_store
+
+def get_saga(request: Request) -> "SagaTransactionManager":
+    return request.app.state.saga
 
 def get_saga_manager(request: Request) -> SagaTransactionManager:
     return request.app.state.saga
@@ -83,6 +87,39 @@ async def query_endpoint(
             status_code=500, 
             detail="An unexpected error occurred while processing your query. Please try again later."
         )
+
+
+@router.post("/query/stream")
+async def query_stream_endpoint(
+    request: QueryRequest,
+    retriever: HybridRetriever = Depends(get_retriever),
+    synthesizer: ResponseSynthesizer = Depends(get_synthesizer),
+):
+    """
+    SSE streaming endpoint — delivers LLM tokens in real-time.
+    
+    Event protocol:
+      1. metadata: {query_type, graph_results_count, vector_results_count}
+      2. token: "partial text..." (repeated)
+      3. done: {citations: {...}}
+    """
+    logger.info(f"Stream query received: {request.question[:100]}...")
+
+    # Retrieval runs first (typically <1s), then we stream the LLM response
+    retrieval_results = await retriever.aretrieve(
+        query=request.question,
+        top_k=request.top_k,
+        include_images=request.include_images,
+    )
+
+    return StreamingResponse(
+        synthesizer.asynthesize_stream(
+            query=request.question,
+            retrieval_results=retrieval_results,
+        ),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @router.get("/recipes", response_model=list[RecipeSummary])
@@ -161,21 +198,18 @@ def _check_qdrant() -> str:
 
 from backend.ingestion.pipeline import IngestionPipeline
 
+
 @router.post("/upload")
 async def upload_document(
     background_tasks: BackgroundTasks, 
     file: UploadFile = File(...),
     graph: GraphBuilder = Depends(get_graph),
     vector_store: VectorStoreManager = Depends(get_vector_store),
-    saga: SagaTransactionManager = Depends(get_saga_manager)
+    saga: "SagaTransactionManager" = Depends(get_saga)
 ):
-    """
-    Upload a PDF cookbook document for ingestion.
-    """
     if not file.filename.lower().endswith(".pdf"):
         raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
 
-    # Save file safely (using to_thread as previously hardened)
     raw_dir = Path("data/raw")
     raw_dir.mkdir(parents=True, exist_ok=True)
     dest = raw_dir / file.filename
@@ -185,21 +219,19 @@ async def upload_document(
             await asyncio.to_thread(shutil.copyfileobj, file.file, buf)
     except Exception as e:
         logger.error(f"Failed to save file {dest}: {e}")
-        raise HTTPException(status_code=500, detail="Failed to securely save the uploaded document.")
+        raise HTTPException(status_code=500, detail="Failed to save document.")
 
-    # PRODUCTION FIX: Initialize Pipeline with shared DB connections AND shared Saga Manager
+    # PRODUCTION FIX: Tiêm (Inject) toàn bộ Global Connections vào Pipeline
     pipeline = IngestionPipeline(
         graph_builder=graph, 
         vector_store=vector_store,
         saga_manager=saga
     )
     
-    # Native FastAPI Async Background Task
     background_tasks.add_task(pipeline.aingest, str(dest))
 
     return {
         "status": "accepted",
         "filename": file.filename,
-        "message": "File uploaded successfully. Ingestion pipeline started in background."
+        "message": "File uploaded successfully. Ingestion started."
     }
-
