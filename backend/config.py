@@ -47,7 +47,7 @@ class Settings(BaseSettings):
 
     # --- Rate Limiting (Google AI Free Tier: 15 RPM) ---
     api_cooldown_seconds: int = Field(default=75)
-    entity_batch_size: int = Field(default=1)
+    entity_batch_size: int = Field(default=3)
 
     # --- Evaluation ---
     eval_test_size: int = Field(default=50)
