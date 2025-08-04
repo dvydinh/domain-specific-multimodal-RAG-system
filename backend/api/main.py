@@ -46,6 +46,7 @@ async def lifespan(app: FastAPI):
     app.state.graph = GraphBuilder()
     app.state.vector_store = VectorStoreManager()
     app.state.saga = SagaTransactionManager()
+    app.state.saga.start_worker()
 
     yield
 
