@@ -1,16 +1,21 @@
 """
-Ingestion pipeline orchestrator.
+Ingestion pipeline orchestrator with crash-resilient checkpointing.
 
 Coordinates the full ETL flow:
   PDF → Extract → Chunk → Entity Extract → Graph Build → Vector Embed
 
-Production-Ready: Now fully asynchronous to prevent Event Loop blocking
-during long-running PDF extraction and LLM batching.
+Features:
+  - Checkpoint/Resume: After each page is processed, progress is saved to
+    disk. If the process crashes, it resumes from the last completed page.
+  - Saga-protected inserts: Vector storage failures trigger compensating
+    rollbacks in the Graph DB via SagaTransactionManager.
+  - Batched entity extraction: Chunks are grouped to reduce LLM API calls.
 """
 
 import logging
 import re
 import asyncio
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -25,10 +30,14 @@ from backend.ingestion.saga import SagaTransactionManager
 
 logger = logging.getLogger(__name__)
 
+_CHECKPOINT_DIR = Path("data")
+_CHECKPOINT_FILE = _CHECKPOINT_DIR / ".ingestion_checkpoint.json"
+
 
 class IngestionPipeline:
     """
-    End-to-end ingestion pipeline for recipe PDFs (Asynchronous).
+    End-to-end ingestion pipeline for recipe PDFs.
+    Supports checkpoint/resume for crash resilience.
     """
 
     def __init__(
@@ -59,8 +68,44 @@ class IngestionPipeline:
         self.graph_builder.create_constraints()
         self.vector_store.create_collections()
 
+    # ================================================================
+    # Checkpoint helpers
+    # ================================================================
+
+    def _load_checkpoint(self, pdf_path: str) -> int:
+        """Load last completed page index for this PDF. Returns -1 if none."""
+        try:
+            if _CHECKPOINT_FILE.exists():
+                data = json.loads(_CHECKPOINT_FILE.read_text())
+                if data.get("pdf") == pdf_path:
+                    last_page = data.get("last_page", -1)
+                    logger.info(f"Resuming from checkpoint: page {last_page + 1}")
+                    return last_page
+        except (json.JSONDecodeError, IOError):
+            pass
+        return -1
+
+    def _save_checkpoint(self, pdf_path: str, page_index: int) -> None:
+        """Save progress after each page is fully processed."""
+        _CHECKPOINT_DIR.mkdir(parents=True, exist_ok=True)
+        _CHECKPOINT_FILE.write_text(json.dumps({
+            "pdf": pdf_path,
+            "last_page": page_index,
+        }))
+
+    def _clear_checkpoint(self) -> None:
+        """Remove checkpoint file after successful completion."""
+        try:
+            _CHECKPOINT_FILE.unlink(missing_ok=True)
+        except IOError:
+            pass
+
+    # ================================================================
+    # Main ingestion flow
+    # ================================================================
+
     async def aingest(self, pdf_path: str) -> dict:
-        """Process a single PDF asynchronously."""
+        """Process a single PDF with checkpoint/resume support."""
         pdf_name = Path(pdf_path).name
         logger.info(f"Starting ingestion: {pdf_name}")
 
@@ -74,28 +119,36 @@ class IngestionPipeline:
             "image_vectors": 0,
         }
 
-        # Step 1: Sequential Page Streaming
+        # Load checkpoint — skip already-processed pages
+        last_completed_page = self._load_checkpoint(pdf_path)
+
         pages_generator = self.extractor.extract(pdf_path)
         current_recipe = None
 
-        for page in pages_generator:
+        for page_index, page in enumerate(pages_generator):
+            # Skip pages that were already processed before a crash
+            if page_index <= last_completed_page:
+                logger.info(f"  Skipping page {page_index} (already checkpointed)")
+                continue
+
             stats["pages_extracted"] += 1
-            
-            # Step 2: Chunk (CPU-bound, wrap in thread)
+
+            # Step 2: Chunk (CPU-bound)
             page_chunks = await asyncio.to_thread(self._chunk_pages, [page], pdf_name)
             stats["chunks_created"] += len(page_chunks)
 
             if not page_chunks and not page.image_paths:
+                self._save_checkpoint(pdf_path, page_index)
                 continue
 
-            # Step 3: Extract Entities (I/O & LLM-bound, Native Async)
+            # Step 3: Extract Entities (batched LLM calls)
             chunk_texts = [c.text for c in page_chunks]
             entities = []
             if chunk_texts:
                 entities = await self.entity_extractor.aextract_batch(chunk_texts)
                 stats["entities_extracted"] += len(entities)
 
-            # Step 4: Build Graph (I/O-intensive Neo4j calls)
+            # Step 4: Build Graph
             recipe_id_map = {}
             if entities:
                 recipe_id_map = await asyncio.to_thread(
@@ -103,13 +156,14 @@ class IngestionPipeline:
                 )
                 stats["recipes_added"] += len(recipe_id_map)
 
-            # Assign names
+            # Assign recipe names to chunks
             for chunk in page_chunks:
                 for entity in entities:
                     if re.search(rf"\b{re.escape(entity.recipe_name.lower())}\b", chunk.text.lower()):
                         current_recipe = entity.recipe_name
                         break
-            # === Step 5: Embed and Store (Atomic Saga Transaction) ===
+
+            # Step 5: Embed and Store (Saga-protected)
             async def _phase_2_insert(recipe_id_map, page_chunks):
                 if page_chunks:
                     await asyncio.to_thread(
@@ -127,21 +181,26 @@ class IngestionPipeline:
                         self.graph_builder.delete_recipes, list(recipe_id_map.values())
                     )
 
-            # PRODUCTION-READY: Execute via REAL Saga Manager
             await self.saga_manager.execute_insert(
                 insert_fn=_phase_2_insert,
                 rollback_fn=_phase_2_rollback,
                 recipe_id_map=recipe_id_map,
-                page_chunks=page_chunks
+                page_chunks=page_chunks,
             )
-            
+
             stats["text_vectors"] += len(page_chunks)
             stats["image_vectors"] += len(page.image_paths) if page.image_paths else 0
 
+            # Checkpoint: this page is fully done
+            self._save_checkpoint(pdf_path, page_index)
+
+        # All pages processed — clear checkpoint
+        self._clear_checkpoint()
+        logger.info(f"Ingestion complete: {stats}")
         return stats
 
     async def aingest_directory(self, directory: str) -> list[dict]:
-        """Process all PDFs asynchronously."""
+        """Process all PDFs with per-file checkpointing."""
         dir_path = Path(directory)
         pdf_files = sorted(dir_path.glob("*.pdf"))
         all_stats = []
