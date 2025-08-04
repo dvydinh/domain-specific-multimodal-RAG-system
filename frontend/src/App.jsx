@@ -22,8 +22,22 @@ export default function App() {
     setMessages(prev => [...prev, userMessage])
     setIsLoading(true)
 
+    // Create a placeholder assistant message for streaming
+    const assistantId = Date.now() + 1
+    const assistantMessage = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      citations: {},
+      queryType: '',
+      graphCount: 0,
+      vectorCount: 0,
+      timestamp: new Date().toLocaleTimeString(),
+    }
+    setMessages(prev => [...prev, assistantMessage])
+
     try {
-      const res = await fetch(`${API_BASE}/query`, {
+      const res = await fetch(`${API_BASE}/query/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -35,29 +49,53 @@ export default function App() {
 
       if (!res.ok) throw new Error(`API error: ${res.status}`)
 
-      const data = await res.json()
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
 
-      const assistantMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: data.response,
-        citations: data.citations || {},
-        queryType: data.query_type,
-        graphCount: data.graph_results_count,
-        vectorCount: data.vector_results_count,
-        timestamp: new Date().toLocaleTimeString(),
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split('\n\n')
+        buffer = lines.pop() || ''
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.event === 'metadata') {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantId
+                  ? { ...m, queryType: event.data.query_type, graphCount: event.data.graph_results_count, vectorCount: event.data.vector_results_count }
+                  : m
+              ))
+            } else if (event.event === 'token') {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + event.data }
+                  : m
+              ))
+            } else if (event.event === 'done') {
+              setMessages(prev => prev.map(m =>
+                m.id === assistantId
+                  ? { ...m, citations: event.data.citations || {} }
+                  : m
+              ))
+            }
+          } catch (parseErr) {
+            // Skip malformed SSE lines
+          }
+        }
       }
-      setMessages(prev => [...prev, assistantMessage])
     } catch (err) {
-      const errorMessage = {
-        id: Date.now() + 1,
-        role: 'assistant',
-        content: `Something went wrong: ${err.message}. Make sure the backend server is running.`,
-        citations: {},
-        queryType: 'error',
-        timestamp: new Date().toLocaleTimeString(),
-      }
-      setMessages(prev => [...prev, errorMessage])
+      setMessages(prev => prev.map(m =>
+        m.id === assistantId
+          ? { ...m, content: `Something went wrong: ${err.message}. Make sure the backend server is running.`, queryType: 'error' }
+          : m
+      ))
     } finally {
       setIsLoading(false)
     }

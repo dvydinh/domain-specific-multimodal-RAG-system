@@ -205,6 +205,58 @@ class ResponseSynthesizer:
             if img.get("neo4j_recipe_id") == recipe_id:
                 image_path = img.get("image_path", "")
                 if image_path:
-                    # Convert to API-servable URL
                     return f"/api/images/{image_path.split('/')[-1]}"
         return None
+
+    async def asynthesize_stream(self, query: str, retrieval_results: dict):
+        """
+        Stream LLM tokens via Server-Sent Events for real-time UX.
+        
+        Yields JSON-encoded SSE events:
+          1. {"event": "metadata", "data": {...}} — retrieval stats (instant)
+          2. {"event": "token", "data": "..."} — each LLM token chunk
+          3. {"event": "done", "data": {...}} — citations and completion
+        """
+        import json as _json
+
+        context_parts, citations = self._build_context(retrieval_results)
+
+        # Yield metadata immediately (user sees retrieval stats while LLM thinks)
+        metadata = {
+            "query_type": retrieval_results.get("query_type", "hybrid"),
+            "graph_results_count": len(retrieval_results.get("graph_results", [])),
+            "vector_results_count": len(retrieval_results.get("text_results", [])),
+        }
+        yield f"data: {_json.dumps({'event': 'metadata', 'data': metadata})}\n\n"
+
+        if not context_parts:
+            fallback = "Based on the provided documents, I cannot find this information."
+            yield f"data: {_json.dumps({'event': 'token', 'data': fallback})}\n\n"
+            yield f"data: {_json.dumps({'event': 'done', 'data': {'citations': {}}})}\n\n"
+            return
+
+        context_str = "\n\n".join(context_parts)
+        messages = [
+            SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
+            HumanMessage(content=(
+                f"Context:\n{context_str}\n\n"
+                f"Question: {query}\n\n"
+                f"Answer the question using ONLY the context above. "
+                f"Include citation markers [1], [2], etc."
+            )),
+        ]
+
+        try:
+            async for chunk in self.llm.astream(messages):
+                token = chunk.content
+                if token:
+                    yield f"data: {_json.dumps({'event': 'token', 'data': token})}\n\n"
+        except Exception as e:
+            logger.error(f"LLM streaming failed: {e}")
+            yield f"data: {_json.dumps({'event': 'token', 'data': 'An error occurred while generating the response.'})}\n\n"
+
+        # Yield citations as final event
+        citations_serializable = {
+            k: v.model_dump() for k, v in citations.items()
+        }
+        yield f"data: {_json.dumps({'event': 'done', 'data': {'citations': citations_serializable}})}\n\n"
