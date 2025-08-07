@@ -1,85 +1,60 @@
 """
-LLM-based entity extraction using Google Gemini structured output.
+LLM-based entity extraction using Google Gemini.
 
 Scans text chunks and extracts structured recipe data:
 recipe names, ingredients, tags, and cuisine type.
 
 Rate-limited to respect Google AI free tier (15 RPM).
+Using manual JSON parsing to bypass LangChain with_structured_output bugs
+with newer Gemini 3.1-flash-preview schemas.
 """
 
 import logging
 import time
+import json
+import re
 from typing import Optional
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
+import os
+from dotenv import load_dotenv
 
+# Force load API Key and Model from .env file
+load_dotenv()
 from backend.config import get_settings
 from backend.models import ExtractedEntity, Ingredient, Tag
+from langchain_google_genai import HarmCategory, HarmBlockThreshold
 
 logger = logging.getLogger(__name__)
 
-# JSON schema for function calling — tells the LLM exactly what to return
-EXTRACTION_FUNCTION = {
-    "name": "extract_recipe_entities",
-    "description": "Extract structured recipe information from a text passage",
-    "parameters": {
-        "type": "object",
-        "properties": {
-            "recipes": {
-                "type": "array",
-                "description": "List of recipes found in the text",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "recipe_name": {
-                            "type": "string",
-                            "description": "Name of the recipe/dish"
-                        },
-                        "cuisine": {
-                            "type": "string",
-                            "description": "Cuisine type (e.g., Japanese, Italian, Vietnamese)"
-                        },
-                        "ingredients": {
-                            "type": "array",
-                            "items": {
-                                "type": "object",
-                                "properties": {
-                                    "name": {
-                                        "type": "string",
-                                        "description": "Ingredient name in lowercase"
-                                    },
-                                    "quantity": {
-                                        "type": "string",
-                                        "description": "Amount (e.g., '200g', '2 cups')"
-                                    },
-                                    "unit": {
-                                        "type": "string",
-                                        "description": "Unit of measurement"
-                                    }
-                                },
-                                "required": ["name"]
-                            }
-                        },
-                        "tags": {
-                            "type": "array",
-                            "items": {
-                                "type": "string"
-                            },
-                            "description": "Classification tags: Vegan, Vegetarian, Spicy, Gluten-Free, cuisine type, meal type, etc."
-                        }
-                    },
-                    "required": ["recipe_name", "ingredients", "tags"]
-                }
-            }
-        },
-        "required": ["recipes"]
-    }
-}
-
 SYSTEM_PROMPT = """You are a culinary data extraction specialist. Your job is to analyze
 text passages from cooking books and extract structured recipe information.
+
+OUTPUT FORMAT REQUIREMENTS:
+You MUST output ONLY a valid JSON object matching the exact internal structure below.
+Do not include any conversational text, markdown formatting blocks (like ```json), or trailing commas.
+
+EXPECTED JSON SCHEMA:
+{
+  "recipes": [
+    {
+      "recipe_name": "string (Name of the recipe/dish)",
+      "cuisine": "string (Cuisine type, e.g., Japanese, Italian, Vietnamese)",
+      "ingredients": [
+        {
+          "name": "string (Ingredient name in lowercase)",
+          "quantity": "string (Amount, e.g., '200g', '2 cups')",
+          "unit": "string (Unit of measurement)"
+        }
+      ],
+      "tags": [
+        "string (Classification tags: Vegan, Vegetarian, Spicy, Gluten-Free, meal type, etc.)"
+      ]
+    }
+  ]
+}
 
 Rules:
 - Extract ALL recipes mentioned in the passage
@@ -89,12 +64,13 @@ Rules:
 - Include flavor/style tags (e.g., "Spicy", "Sweet", "Comfort Food")
 - If the cuisine is identifiable, include it as both a tag and the cuisine field
 - Be thorough: extract even partial recipe mentions
-- If no recipe is found, return an empty recipes array"""
+- If no recipe is found, return {"recipes": []}"""
 
 
 class EntityExtractor:
     """
-    Extracts recipe entities from text using Google Gemini structured output.
+    Extracts recipe entities from text using Google Gemini raw text output
+    managed via strict JSON prompts and manual validation handlers.
 
     Rate-limited via configurable cooldown to stay within Google AI free tier
     (15 RPM). Uses tenacity retry for transient API failures.
@@ -110,15 +86,30 @@ class EntityExtractor:
         settings = get_settings()
 
         self.llm = ChatGoogleGenerativeAI(
-            api_key=api_key or settings.google_api_key,
-            model=model or settings.google_model,
-            temperature=0.0,
-            max_output_tokens=2000,
-            max_retries=2
-        ).with_structured_output(EXTRACTION_FUNCTION)
+            model=os.getenv("GOOGLE_MODEL", "gemini-3.1-flash-preview"),
+            google_api_key=os.getenv("GOOGLE_API_KEY"),
+            temperature=0,
+            max_retries=1,
+            timeout=60,
+            safety_settings={
+                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+            }
+        )
 
         self._cooldown = settings.api_cooldown_seconds
         self._batch_size = settings.entity_batch_size
+
+    def _clean_json_output(self, raw_text: str) -> str:
+        """Strip markdown ticks and potential conversational artifacts."""
+        cleaned = raw_text.strip()
+        # Remove typical markdown block format if present
+        if cleaned.startswith("```"):
+            cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE)
+            cleaned = re.sub(r"```$", "", cleaned.strip())
+        return cleaned.strip()
 
     @retry(
         stop=stop_after_attempt(3),
@@ -142,26 +133,44 @@ class EntityExtractor:
             HumanMessage(content=f"Extract recipe entities from this text:\n\n{text}"),
         ]
 
-        response = self.llm.invoke(messages)
+        try:
+            response = self.llm.invoke(messages)
+            if not response or not hasattr(response, 'content'):
+                logger.warning("LLM response is empty or malformed.")
+                return []
+            
+            raw_text = response.content
+        except Exception as e:
+            logger.error(f"LLM API failure during extraction: {e}")
+            raise  # Let tenacity retry it
 
-        if not response:
-            logger.warning("LLM did not return a response")
-            return []
+        cleaned_json = self._clean_json_output(raw_text)
 
-        entities = self._parse_result(response)
+        try:
+            data = json.loads(cleaned_json)
+        except json.JSONDecodeError as e:
+            logger.error(f"JSON Parse Error: {e}\nRaw LLM output:\n{raw_text}")
+            # Raise exception so @retry knows to try asking the LLM again
+            raise ValueError(f"Failed to parse LLM valid JSON: {str(e)}")
+
+        entities = self._parse_result(data)
         logger.info(f"Extracted {len(entities)} recipe entities from text chunk")
         return entities
 
     def _parse_result(self, result: dict) -> list[ExtractedEntity]:
-        """Convert raw LLM JSON output to validated Pydantic models.
+        """Convert safely parsed JSON dict to validated Pydantic models.
 
         Args:
-            result: Parsed JSON dict from the structured output LLM.
+            result: Parsed JSON dict matching the SYSTEM_PROMPT schema.
 
         Returns:
             List of validated ExtractedEntity models.
         """
         entities: list[ExtractedEntity] = []
+
+        if not isinstance(result, dict) or "recipes" not in result:
+            logger.warning("LLM JSON output did not contain 'recipes' key. Defaulting to empty.")
+            return entities
 
         for recipe_data in result.get("recipes", []):
             try:
@@ -172,25 +181,26 @@ class EntityExtractor:
                         unit=ing.get("unit"),
                     )
                     for ing in recipe_data.get("ingredients", [])
-                    if ing.get("name")
+                    if isinstance(ing, dict) and ing.get("name")
                 ]
 
                 tags = [
                     Tag(name=tag.strip())
                     for tag in recipe_data.get("tags", [])
-                    if tag.strip()
+                    if isinstance(tag, str) and tag.strip()
                 ]
 
                 entity = ExtractedEntity(
-                    recipe_name=recipe_data["recipe_name"],
+                    recipe_name=recipe_data.get("recipe_name", "Unknown Recipe"),
                     ingredients=ingredients,
                     tags=tags,
                     cuisine=recipe_data.get("cuisine"),
                 )
                 entities.append(entity)
 
-            except (KeyError, ValueError) as e:
-                logger.warning(f"Skipping malformed recipe data: {e}")
+            except Exception as e:
+                # Catch Pydantic ValidationError or standard TypeErrors
+                logger.warning(f"Skipping malformed recipe data row - {e}")
 
         return entities
 
@@ -226,7 +236,7 @@ class EntityExtractor:
                         seen_names.add(normalized)
                         all_entities.append(entity)
             except Exception as e:
-                logger.error(f"Batch extraction failed for batch {batch_num}: {e}")
+                logger.error(f"Batch extraction ultimately failed for batch {batch_num} after retries: {e}")
 
             # Rate limit: sleep between API calls to stay under 15 RPM
             if i + self._batch_size < len(texts):

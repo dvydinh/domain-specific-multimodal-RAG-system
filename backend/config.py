@@ -20,7 +20,7 @@ class Settings(BaseSettings):
 
     # --- Google AI API ---
     google_api_key: str = Field(default="")
-    google_model: str = Field(default="gemini-2.0-flash")
+    google_model: str = Field(default="gemini-3.1-flash-lite-preview")
 
 
     # --- Neo4j ---
@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     image_output_dir: str = Field(default="data/images")
 
     # --- Rate Limiting (Google AI Free Tier: 15 RPM) ---
-    api_cooldown_seconds: int = Field(default=15)
-    entity_batch_size: int = Field(default=2)
+    api_cooldown_seconds: int = Field(default=75)
+    entity_batch_size: int = Field(default=1)
 
     # --- Evaluation ---
     eval_test_size: int = Field(default=50)
