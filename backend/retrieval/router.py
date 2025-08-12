@@ -14,11 +14,12 @@ import logging
 from enum import Enum
 from typing import Optional
 
+from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-
+from dotenv import load_dotenv
 from backend.config import get_settings
-
+load_dotenv()
 logger = logging.getLogger(__name__)
 
 
@@ -118,12 +119,11 @@ class QueryRouter:
         query_lower = query.lower()
         features = {
             "has_negation": any(w in query_lower for w in [
-                "without", "no ", "not ", "exclude", "không",
+                "without", "no ", "not ", "exclude",
                 "don't", "never", "avoid"
             ]),
             "has_ingredient_mention": any(w in query_lower for w in [
                 "ingredient", "contain", "use", "with", "has",
-                "nguyên liệu", "có"
             ]),
             "has_cuisine_tag": any(w in query_lower for w in [
                 "japanese", "italian", "vietnamese", "chinese",
@@ -131,14 +131,14 @@ class QueryRouter:
             ]),
             "has_dietary_tag": any(w in query_lower for w in [
                 "vegan", "vegetarian", "gluten-free", "spicy",
-                "chay", "cay", "healthy"
+                "healthy"
             ]),
             "wants_instructions": any(w in query_lower for w in [
                 "how", "recipe", "cook", "make", "prepare",
-                "instructions", "steps", "cách làm", "hướng dẫn"
+                "instructions", "steps"
             ]),
             "wants_images": any(w in query_lower for w in [
-                "image", "photo", "picture", "show me", "ảnh", "hình"
+                "image", "photo", "picture", "show me"
             ]),
         }
 

@@ -15,15 +15,15 @@ import logging
 import os
 import sys
 
-# --- MONKEY PATCH BẮT BUỘC ĐỂ SỬA LỖI TEMPERATURE CỦA GEMINI VỚI RAGAS ---
+# --- MONKEY PATCH FIX FOR GEMINI TEMPERATURE WITH RAGAS ---
 from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
 original_agenerate = ChatGoogleGenerativeAI._agenerate
 async def patched_agenerate(self, *args, **kwargs):
-    # Lấy thông số từ đối tượng, loại bỏ temperature nếu nó bằng 0 hoặc không hợp lệ
+    # Extract params, removing temperature if invalid/zero
     gen_kwargs = self._get_ls_params() if hasattr(self, '_get_ls_params') else {}
     if "temperature" in gen_kwargs:
         del gen_kwargs["temperature"]
-    # Ép kwargs của hàm không được chứa temperature
+    # Force kwargs to not contain temperature
     if "temperature" in kwargs:
          del kwargs["temperature"]
     return await original_agenerate(self, *args, **kwargs)
@@ -52,79 +52,30 @@ logger = logging.getLogger(__name__)
 
 
 # ================================================================
-# Dataset Generation
+# Dataset
 # ================================================================
 
-def generate_synthetic_dataset(
-    n: int,
-    llm: ChatGoogleGenerativeAI,
-    embeddings: HuggingFaceEmbeddings,
-) -> list[dict]:
+def load_manual_dataset() -> list[dict]:
     data_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "data", "sample",
     )
-    json_files = glob.glob(os.path.join(data_dir, "*.json"))
-
-    if not json_files:
-        logger.warning(f"No JSON files found in {data_dir}")
+    file_path = os.path.join(data_dir, "manual_meat_eval.json")
+    
+    if not os.path.exists(file_path):
+        logger.error(f"Cannot find manual dataset at {file_path}")
         return []
-
-    docs: list[Document] = []
-    for file_path in json_files:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            for recipe in data:
-                content = f"Recipe: {recipe.get('recipe_name', '')}\n"
-                content += f"Cuisine: {recipe.get('cuisine', '')}\n"
-                content += f"Tags: {', '.join(recipe.get('tags', []))}\n"
-
-                ingredients = recipe.get("ingredients", [])
-                if ingredients:
-                    content += "Ingredients:\n"
-                    for ing in ingredients:
-                        content += f"- {ing.get('quantity', '')} {ing.get('name', '')}\n"
-
-                instructions = recipe.get("instructions", "")
-                if isinstance(instructions, list):
-                    instructions = " ".join(instructions)
-                content += f"Instructions: {instructions}\n"
-
-                docs.append(Document(
-                    page_content=content,
-                    metadata={
-                        "source": file_path,
-                        "recipe_name": recipe.get("recipe_name", ""),
-                    },
-                ))
-
-    generator = TestsetGenerator.from_langchain(
-        generator_llm=llm,
-        critic_llm=llm,
-        embeddings=embeddings,
-    )
-
-    logger.info(f"Generating {n} synthetic evaluation questions using RAGAS...")
-    testset = generator.generate_with_langchain_docs(
-        docs,
-        test_size=n,
-        distributions={simple: 0.5, reasoning: 0.3, multi_context: 0.2},
-    )
-
-    df = testset.to_pandas()
-    dataset = [
-        {"question": row["question"], "ground_truth": row["ground_truth"]}
-        for _, row in df.iterrows()
-    ]
-
-    logger.info(f"Generated {len(dataset)} evaluation questions")
-    return dataset
+        
+    with open(file_path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    
+    logger.info(f"Successfully loaded {len(data)} manual test questions.")
+    return data
 
 
 # ================================================================
 # Pipeline Evaluation
 # ================================================================
-
 async def _evaluate_pipeline(
     questions: list[dict],
     retriever: VectorRetriever | HybridRetriever,
@@ -138,6 +89,11 @@ async def _evaluate_pipeline(
     g_list: list[str] = []
 
     for i, item in enumerate(questions):
+        # Rate Limit Defense: Force the system to sleep 30s between questions to avoid 429
+        if i > 0:
+            logger.info(f"  [{label}] Rate Limit Defense: Sleeping for 30s...")
+            await asyncio.sleep(30)
+
         query = item["question"]
         logger.info(f"  [{label}] Processing question {i + 1}/{len(questions)}")
 
@@ -155,7 +111,6 @@ async def _evaluate_pipeline(
         g_list.append(item["ground_truth"])
 
     return {"question": q_list, "answer": a_list, "contexts": c_list, "ground_truth": g_list}
-
 
 # ================================================================
 # Report Generation
@@ -213,22 +168,11 @@ async def main() -> None:
     )
 
     logger.info("=" * 60)
-    logger.info("Starting A/B Comparative Evaluation: Pure Vector vs Hybrid")
+    logger.info("Starting MANUAL Meat Evaluation (Beef & Chicken)")
     logger.info("=" * 60)
 
     settings = get_settings()
-
-    if not settings.google_api_key:
-        logger.error("GOOGLE_API_KEY is not set. Cannot run evaluation.")
-        return
-
-    logger.info(f"Evaluator/Generator LLM: {settings.google_model}")
-    logger.info(f"Embeddings: {settings.text_embedding_model}")
-
-    gemini_llm = ChatGoogleGenerativeAI(
-        model=settings.google_model,
-        max_retries=2,
-    )
+    gemini_llm = ChatGoogleGenerativeAI(model=settings.google_model, max_retries=2)
     bge_embeddings = HuggingFaceEmbeddings(model_name=settings.text_embedding_model)
 
     try:
@@ -240,56 +184,51 @@ async def main() -> None:
         ragas_llm = gemini_llm
         ragas_emb = bge_embeddings
 
-    # DÙNG GEMINI ĐỂ GENERATE DATASET LUÔN
-    eval_questions = generate_synthetic_dataset(
-        n=settings.eval_test_size,
-        llm=gemini_llm, 
-        embeddings=bge_embeddings,
-    )
+    # RATE LIMITER CONFIG
+    from ragas.run_config import RunConfig
+    eval_config = RunConfig(timeout=75, max_retries=10, max_wait=75, max_workers=1)
+
+    # 1. LOAD MANUAL DATASET
+    eval_questions = load_manual_dataset()
 
     if not eval_questions:
-        logger.error("No evaluation questions generated. Aborting.")
+        logger.error("No evaluation questions found. Aborting.")
         return
 
+    # 2. EVALUATE BASELINE
     logger.info("[1] Evaluating Pure Vector Baseline...")
-    baseline_data = await _evaluate_pipeline(
-        eval_questions, VectorRetriever(), label="Baseline"
-    )
+    baseline_data = await _evaluate_pipeline(eval_questions, VectorRetriever(), label="Baseline")
     baseline_dataset = Dataset.from_dict(baseline_data)
-
     baseline_score = evaluate(
         baseline_dataset,
         metrics=[faithfulness, answer_relevancy],
         llm=ragas_llm,
         embeddings=ragas_emb,
+        run_config=eval_config,
+        raise_exceptions=False
     )
 
+    # 3. EVALUATE HYBRID
     logger.info("[2] Evaluating Hybrid RAG Architecture...")
-    hybrid_data = await _evaluate_pipeline(
-        eval_questions, HybridRetriever(), label="Hybrid"
-    )
+    hybrid_data = await _evaluate_pipeline(eval_questions, HybridRetriever(), label="Hybrid")
     hybrid_dataset = Dataset.from_dict(hybrid_data)
-
     hybrid_score = evaluate(
         hybrid_dataset,
         metrics=[faithfulness, answer_relevancy],
         llm=ragas_llm,
         embeddings=ragas_emb,
+        run_config=eval_config,
+        raise_exceptions=False
     )
 
+    # 4. PRINT RESULTS AND SAVE REPORT
     logger.info("Comparative Benchmark Complete:")
-    logger.info(
-        f"Baseline -> Faithfulness: {baseline_score.get('faithfulness', 0):.4f}, "
-        f"Answer Relevance: {baseline_score.get('answer_relevancy', 0):.4f}"
-    )
-    logger.info(
-        f"Hybrid   -> Faithfulness: {hybrid_score.get('faithfulness', 0):.4f}, "
-        f"Answer Relevance: {hybrid_score.get('answer_relevancy', 0):.4f}"
-    )
+    logger.info(f"Baseline -> Faithfulness: {baseline_score.get('faithfulness', 0):.4f}, Relevancy: {baseline_score.get('answer_relevancy', 0):.4f}")
+    logger.info(f"Hybrid   -> Faithfulness: {hybrid_score.get('faithfulness', 0):.4f}, Relevancy: {hybrid_score.get('answer_relevancy', 0):.4f}")
 
     benchmarks_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
-        "benchmarks",
+        "benchmarks"
     )
     _save_benchmark_report(baseline_score, hybrid_score, benchmarks_dir)
 
