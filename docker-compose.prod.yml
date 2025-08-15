@@ -1,0 +1,82 @@
+version: "3.9"
+
+services:
+  neo4j:
+    image: neo4j:5.20-community
+    container_name: rag-neo4j-prod
+    ports:
+      - "7474:7474"   # Browser UI
+      - "7687:7687"   # Bolt protocol
+    environment:
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ragpassword}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_db_tx__timeout: "60s"
+    volumes:
+      - neo4j_data_prod:/data
+      - neo4j_logs_prod:/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.10.1
+    container_name: rag-qdrant-prod
+    ports:
+      - "6333:6333"   # REST API
+    volumes:
+      - qdrant_storage_prod:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: rag-api-prod
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+    environment:
+      # Inject critical env variables from the host's `.env` file automatically
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL:-BAAI/bge-m3}
+      - CLIP_MODEL=${CLIP_MODEL:-ViT-B-32}
+      # Re-route connections internally to docker networks
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-ragpassword}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - CORS_ORIGINS=*
+    volumes:
+      # Mount data so that PDF pipeline uploads persist
+      - ./data:/app/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: rag-web-prod
+    depends_on:
+      - api
+    ports:
+      - "80:80" # Exposed to the world smoothly orchestrating all traffic
+    restart: unless-stopped
+
+volumes:
+  neo4j_data_prod:
+  neo4j_logs_prod:
+  qdrant_storage_prod:

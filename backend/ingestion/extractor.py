@@ -21,6 +21,8 @@ class TextBlock:
     """A block of text with its bounding box coordinates."""
     text: str
     bbox: tuple[float, float, float, float]
+    start_idx: int = 0
+    end_idx: int = 0
 
 
 @dataclass
@@ -45,22 +47,21 @@ class PDFExtractor:
         self.image_output_dir = Path(image_output_dir)
         self.image_output_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract(self, pdf_path: str) -> list[PageContent]:
+    def extract(self, pdf_path: str): # Generator yielding PageContent
         """
         Extract all text and images from a PDF file.
 
         Args:
             pdf_path: Path to the input PDF file.
 
-        Returns:
-            List of PageContent objects, one per page.
+        Yields:
+            PageContent objects, one per page.
         """
         pdf_path = Path(pdf_path)
         if not pdf_path.exists():
             raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
         pdf_name = pdf_path.stem
-        pages: list[PageContent] = []
 
         logger.info(f"Opening PDF: {pdf_path}")
         doc = fitz.open(str(pdf_path))
@@ -71,35 +72,40 @@ class PDFExtractor:
 
             # --- Extract text and blocks ---
             blocks = []
-            full_text = []
+            full_text_parts = []
+            current_idx = 0
+            
             for b in page.get_text("blocks"):
                 if b[6] == 0:  # Text block
                     block_text = b[4].strip()
                     if block_text:
+                        start_idx = current_idx
+                        end_idx = current_idx + len(block_text)
+                        
                         blocks.append(TextBlock(
                             text=block_text,
-                            bbox=(b[0], b[1], b[2], b[3])
+                            bbox=(b[0], b[1], b[2], b[3]),
+                            start_idx=start_idx,
+                            end_idx=end_idx
                         ))
-                        full_text.append(block_text)
+                        full_text_parts.append(block_text)
+                        current_idx += len(block_text) + 2  # +2 for \n\n separator
             
-            text = "\n\n".join(full_text)
+            text = "\n\n".join(full_text_parts)
 
             # --- Extract images ---
             image_paths = self._extract_images(page, pdf_name, page_num)
 
             if text or image_paths:
-                pages.append(PageContent(
+                yield PageContent(
                     page_number=page_num,
                     text=text,
                     blocks=blocks,
                     image_paths=image_paths,
-                ))
+                )
 
         doc.close()
-        logger.info(
-            f"Extracted {len(pages)} pages with content from {pdf_path.name}"
-        )
-        return pages
+        logger.info(f"Finished extracting content from {pdf_path.name}")
 
     def _extract_images(
         self, page: fitz.Page, pdf_name: str, page_num: int

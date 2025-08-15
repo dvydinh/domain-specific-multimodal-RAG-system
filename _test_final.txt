@@ -1,0 +1,26 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0 -- D:\python\python.exe
+cachedir: .pytest_cache
+rootdir: D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system
+plugins: anyio-4.12.1, langsmith-0.7.22
+collecting ... collected 11 items
+
+tests/test_chunker.py::TestTextChunker::test_basic_chunking PASSED       [  9%]
+tests/test_chunker.py::TestTextChunker::test_multi_chunk_splitting PASSED [ 18%]
+tests/test_chunker.py::TestTextChunker::test_overlap_content PASSED      [ 27%]
+tests/test_chunker.py::TestTextChunker::test_empty_text_returns_nothing PASSED [ 36%]
+tests/test_chunker.py::TestTextChunker::test_chunk_index_sequential PASSED [ 45%]
+tests/test_chunker.py::TestTextChunker::test_chunk_metadata_preserved PASSED [ 54%]
+tests/test_chunker.py::TestTextChunker::test_overlap_must_be_less_than_size PASSED [ 63%]
+tests/test_chunker.py::TestTextChunker::test_chunk_pages PASSED          [ 72%]
+tests/test_chunker.py::TestTextChunker::test_sentence_boundary_awareness PASSED [ 81%]
+tests/test_chunker.py::TestTextChunker::test_bbox_stop_words_prevented PASSED [ 90%]
+tests/test_chunker.py::TestTextChunker::test_performance_no_blocking PASSED [100%]
+
+============================== warnings summary ===============================
+..\..\..\python\Lib\site-packages\langchain_core\_api\deprecation.py:25
+  D:\python\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+    from pydantic.v1.fields import FieldInfo as FieldInfoV1
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 11 passed, 1 warning in 6.20s ========================

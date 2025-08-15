@@ -51,13 +51,13 @@ class HybridRetriever:
         """
         Execute the full hybrid retrieval pipeline asynchronously.
         Runs Router and Graph Retriever concurrently to minimize latency.
+        The ranking strategy relies 100% on Vector Cosine Similarity mapped
+        within the hard boundaries of the Graph Retriever's output IDs.
         """
         logger.info(f"Starting async hybrid retrieval for: '{query}'")
 
         # === Step 1 & 2: Route and Graph Retrieval (Concurrent) ===
-        # The Graph retrieval only fails if the query doesn't match the required graph format,
-        # but the LLM-to-Cypher isn't intrinsically dependent on the router's output.
-        # We run them concurrently to hide the router latency.
+        # Run them concurrently to hide graph latency during routing analysis.
         router_task = asyncio.create_task(self.router.aroute_with_analysis(query))
         graph_task = asyncio.create_task(self.graph_retriever.aretrieve(query))
 
@@ -77,16 +77,16 @@ class HybridRetriever:
         recipe_ids = None
 
         if query_type in (QueryType.GRAPH_ONLY, QueryType.HYBRID):
-            # We need graph results, wait for it
+            # Graph strictly functions as a HARD FILTER mapping to valid `recipe_ids`
             graph_results = await graph_task
             result["graph_results"] = graph_results
             recipe_ids = [r.get("id") for r in graph_results if r.get("id")]
             result["recipe_ids"] = recipe_ids
 
-            logger.info(f"  → Graph returned {len(recipe_ids)} matching recipes")
+            logger.info(f"  → Graph Hard Filter yielded {len(recipe_ids)} matching valid recipes")
 
             if not recipe_ids:
-                logger.warning("Graph returned no results, expanding to vector-only")
+                logger.warning("Graph Hard Filter returned no results, falling back to Vector-only")
                 query_type = QueryType.VECTOR_ONLY
                 recipe_ids = None
         else:
@@ -96,54 +96,30 @@ class HybridRetriever:
         # === Step 3: Vector retrieval ===
         if query_type in (QueryType.VECTOR_ONLY, QueryType.HYBRID):
             logger.info("[Step 3] Executing vector retrieval...")
-            # Fetch more candidates if hybrid for re-ranking
-            fetch_k = top_k * 2 if query_type == QueryType.HYBRID else top_k
             
+            # Pure semantics: Payload map strictly boundaries the Qdrant Cosine Similarity search.
+            # No fetch multiplier or fusion scores required, we fetch exactly `top_k`.
             vector_results = await self.vector_retriever.aretrieve_all(
                 query=query,
-                top_k_text=fetch_k,
+                top_k_text=top_k,
                 top_k_images=3 if include_images else 0,
-                recipe_ids=recipe_ids,  # None for VECTOR_ONLY, filtered for HYBRID
+                recipe_ids=recipe_ids,  # Must Filter condition in Qdrant Vector DB
                 include_images=include_images,
             )
             
-            text_results = vector_results["text_results"]
-            
-            if query_type == QueryType.HYBRID and result["graph_results"]:
-                logger.info("  → Applying Reciprocal Rank Fusion (RRF) scoring...")
-                # Map neo4j_recipe_id to its rank in graph search
-                graph_ranks = {}
-                for idx, g_res in enumerate(result["graph_results"]):
-                    r_id = g_res.get("id")
-                    if r_id:
-                        graph_ranks[r_id] = idx + 1
-                        
-                K = 60
-                for v_idx, text_res in enumerate(text_results):
-                    v_rank = v_idx + 1
-                    g_rank = graph_ranks.get(text_res.get("neo4j_recipe_id"), float('inf'))
-                    
-                    # Compute RRF score
-                    rrf_score = 1.0 / (K + v_rank)
-                    if g_rank != float('inf'):
-                        rrf_score += 1.0 / (K + g_rank)
-                        
-                    text_res["rrf_score"] = rrf_score
-                    
-                # Sort by RRF and truncate
-                text_results.sort(key=lambda x: x.get("rrf_score", 0), reverse=True)
-            
-            # Truncate to top_k
-            result["text_results"] = text_results[:top_k]
+            result["text_results"] = vector_results["text_results"]
             result["image_results"] = vector_results["image_results"]
 
+            if query_type == QueryType.HYBRID and result["graph_results"]:
+                logger.info("  → Semantic results returned 100% via Cosine Similarity within Payload boundaries.")
+
             logger.info(
-                f"  → Vector/RRF returned {len(result['text_results'])} text, "
+                f"  → Vector Cosine Search returned {len(result['text_results'])} text, "
                 f"{len(result['image_results'])} image results"
             )
 
         elif query_type == QueryType.GRAPH_ONLY:
-            # For graph-only queries, still fetch recipe details from graph
+            # For graph-only queries, enrich with recipe details concurrently
             logger.info("[Step 3] Graph-only mode, enriching with recipe details...")
             enrichment_tasks = [
                 self.graph_retriever.a_get_recipe_details(recipe["id"])

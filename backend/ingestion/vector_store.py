@@ -78,6 +78,7 @@ class VectorStoreManager:
                     distance=qmodels.Distance.COSINE,
                     hnsw_config=hnsw_config,
                 ),
+                on_disk_payload=True,
             )
             logger.info(f"Created collection '{self.text_collection}' (dim={self.TEXT_DIM})")
 
@@ -90,6 +91,7 @@ class VectorStoreManager:
                     distance=qmodels.Distance.COSINE,
                     hnsw_config=hnsw_config,
                 ),
+                on_disk_payload=True,
             )
             logger.info(f"Created collection '{self.image_collection}' (dim={self.IMAGE_DIM})")
 

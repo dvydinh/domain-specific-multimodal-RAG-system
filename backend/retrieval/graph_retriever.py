@@ -156,31 +156,40 @@ class GraphRetriever:
         """Execute a Cypher query and return results (running neo4j in a thread)."""
         def _run():
             with self._driver.session() as session:
-                result = session.run(cypher)
-                return [dict(record) for record in result]
+                # Use execute_read to prevent Cypher Injection from writing to the DB
+                result = session.execute_read(lambda tx: tx.run(cypher).data())
+                return result
         return await asyncio.to_thread(_run)
 
     async def _fallback_search(self, query: str) -> list[dict]:
         """
         Simple fallback: search recipe names when Cypher generation fails.
+        Includes a try-catch to prevent FastAPI crashes if Neo4j is completely down.
         """
         search_term = query.lower()
         def _run():
-            with self._driver.session() as session:
-                result = session.run(
-                    """
-                    MATCH (r:Recipe)
-                    WHERE toLower(r.name) CONTAINS $term
-                       OR EXISTS {
-                           MATCH (r)-[:HAS_TAG]->(t:Tag)
-                           WHERE toLower(t.name) CONTAINS $term
-                       }
-                    RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
-                    LIMIT 20
-                    """,
-                    term=search_term,
-                )
-                return [dict(record) for record in result]
+            try:
+                with self._driver.session() as session:
+                    def _do_fallback(tx):
+                        res = tx.run(
+                            """
+                            MATCH (r:Recipe)
+                            WHERE toLower(r.name) CONTAINS $term
+                               OR EXISTS {
+                                   MATCH (r)-[:HAS_TAG]->(t:Tag)
+                                   WHERE toLower(t.name) CONTAINS $term
+                               }
+                            RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
+                            LIMIT 20
+                            """,
+                            term=search_term,
+                        )
+                        return res.data()
+                    return session.execute_read(_do_fallback)
+            except Exception as e:
+                logger.error(f"Fallback search failed (Database unreachable?): {e}")
+                return []
+                
         return await asyncio.to_thread(_run)
 
     async def a_get_recipe_details(self, recipe_id: str) -> dict:
@@ -189,23 +198,23 @@ class GraphRetriever:
         """
         def _run():
             with self._driver.session() as session:
-                result = session.run(
-                    """
-                    MATCH (r:Recipe {id: $recipe_id})
-                    OPTIONAL MATCH (r)-[rel:CONTAINS_INGREDIENT]->(i:Ingredient)
-                    OPTIONAL MATCH (r)-[:HAS_TAG]->(t:Tag)
-                    RETURN r.id AS id, r.name AS name, r.cuisine AS cuisine,
-                           COLLECT(DISTINCT {
-                               name: i.name,
-                               quantity: rel.quantity,
-                               unit: rel.unit
-                           }) AS ingredients,
-                           COLLECT(DISTINCT t.name) AS tags
-                    """,
-                    recipe_id=recipe_id,
-                )
-                record = result.single()
-                if record:
-                    return dict(record)
-                return {}
+                def _do_get_details(tx):
+                    res = tx.run(
+                        """
+                        MATCH (r:Recipe {id: $recipe_id})
+                        OPTIONAL MATCH (r)-[rel:CONTAINS_INGREDIENT]->(i:Ingredient)
+                        OPTIONAL MATCH (r)-[:HAS_TAG]->(t:Tag)
+                        RETURN r.id AS id, r.name AS name, r.cuisine AS cuisine,
+                               COLLECT(DISTINCT {
+                                   name: i.name,
+                                   quantity: rel.quantity,
+                                   unit: rel.unit
+                               }) AS ingredients,
+                               COLLECT(DISTINCT t.name) AS tags
+                        """,
+                        recipe_id=recipe_id,
+                    )
+                    record = res.single()
+                    return dict(record) if record else {}
+                return session.execute_read(_do_get_details)
         return await asyncio.to_thread(_run)

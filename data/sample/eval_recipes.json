@@ -1,0 +1,112 @@
+[
+  {
+    "recipe_name": "Vegan Buddha Bowl",
+    "cuisine": "International",
+    "ingredients": [
+      {
+        "name": "quinoa",
+        "quantity": "1 cup"
+      },
+      {
+        "name": "sweet potato",
+        "quantity": "1 large"
+      },
+      {
+        "name": "chickpeas",
+        "quantity": "1 can"
+      },
+      {
+        "name": "avocado",
+        "quantity": "1"
+      },
+      {
+        "name": "kale",
+        "quantity": "2 cups"
+      },
+      {
+        "name": "tahini",
+        "quantity": "3 tbsp"
+      },
+      {
+        "name": "lemon juice",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "cumin",
+        "quantity": "1 tsp"
+      },
+      {
+        "name": "smoked paprika",
+        "quantity": "1 tsp"
+      }
+    ],
+    "tags": [
+      "Vegan",
+      "Healthy",
+      "Gluten-Free",
+      "Vegetarian"
+    ],
+    "instructions": "1. Cook quinoa according to package directions. 2. Cube sweet potato, toss with olive oil, cumin, and paprika. Roast at 200\u00b0C for 25 minutes. 3. Drain and rinse chickpeas. Toss with spices and roast alongside sweet potato for 15 minutes. 4. Massage kale with olive oil and lemon juice until softened. 5. Make tahini dressing: whisk tahini, lemon juice, water, salt. 6. Assemble bowls: quinoa base, roasted sweet potato, chickpeas, kale, sliced avocado. Drizzle with tahini dressing."
+  },
+  {
+    "recipe_name": "Pho Bo",
+    "cuisine": "Vietnamese",
+    "ingredients": [
+      {
+        "name": "beef bone",
+        "quantity": "1.5 kg"
+      },
+      {
+        "name": "beef brisket",
+        "quantity": "500g"
+      },
+      {
+        "name": "rice noodles",
+        "quantity": "400g"
+      },
+      {
+        "name": "star anise",
+        "quantity": "3"
+      },
+      {
+        "name": "cinnamon stick",
+        "quantity": "1"
+      },
+      {
+        "name": "fish sauce",
+        "quantity": "3 tbsp"
+      },
+      {
+        "name": "onion",
+        "quantity": "2"
+      },
+      {
+        "name": "ginger",
+        "quantity": "1 large piece"
+      },
+      {
+        "name": "bean sprouts",
+        "quantity": "2 cups"
+      },
+      {
+        "name": "thai basil",
+        "quantity": "1 bunch"
+      },
+      {
+        "name": "lime",
+        "quantity": "2"
+      },
+      {
+        "name": "hoisin sauce",
+        "quantity": "for serving"
+      }
+    ],
+    "tags": [
+      "Vietnamese",
+      "Soup",
+      "Comfort Food",
+      "Beef"
+    ],
+    "instructions": "1. Char onion and ginger under broiler until blackened. 2. Blanch beef bones, discard water. Refill with clean water. 3. Add charred onion, ginger, star anise, cinnamon. Simmer 6-8 hours. 4. Add brisket after 3 hours, cook until tender, then slice thinly. 5. Strain broth, season with fish sauce and sugar. 6. Cook rice noodles in boiling water. 7. Assemble: noodles in bowl, sliced brisket on top, ladle hot broth over. Serve with bean sprouts, Thai basil, lime wedges, hoisin sauce."
+  }
+]

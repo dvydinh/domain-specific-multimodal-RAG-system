@@ -119,65 +119,66 @@ class GraphBuilder:
         recipe_id = str(uuid4())
 
         with self._driver.session() as session:
-            # Create Recipe node
-            session.run(
-                """
-                MERGE (r:Recipe {name: $name})
-                ON CREATE SET
-                    r.id = $id,
-                    r.cuisine = $cuisine,
-                    r.source_pdf = $source_pdf,
-                    r.page_number = $page_number
-                ON MATCH SET
-                    r.cuisine = COALESCE($cuisine, r.cuisine),
-                    r.source_pdf = COALESCE($source_pdf, r.source_pdf)
-                """,
-                name=entity.recipe_name,
-                id=recipe_id,
-                cuisine=entity.cuisine,
-                source_pdf=source_pdf,
-                page_number=page_number,
-            )
-
-            # Create Ingredient nodes and CONTAINS_INGREDIENT edges
-            for ingredient in entity.ingredients:
-                session.run(
+            with session.begin_transaction() as tx:
+                # Create Recipe node
+                tx.run(
                     """
-                    MERGE (i:Ingredient {name: $ing_name})
-                    WITH i
-                    MATCH (r:Recipe {name: $recipe_name})
-                    MERGE (r)-[rel:CONTAINS_INGREDIENT]->(i)
+                    MERGE (r:Recipe {name: $name})
                     ON CREATE SET
-                        rel.quantity = $quantity,
-                        rel.unit = $unit
+                        r.id = $id,
+                        r.cuisine = $cuisine,
+                        r.source_pdf = $source_pdf,
+                        r.page_number = $page_number
+                    ON MATCH SET
+                        r.cuisine = COALESCE($cuisine, r.cuisine),
+                        r.source_pdf = COALESCE($source_pdf, r.source_pdf)
                     """,
-                    ing_name=ingredient.name,
-                    recipe_name=entity.recipe_name,
-                    quantity=ingredient.quantity,
-                    unit=ingredient.unit,
+                    name=entity.recipe_name,
+                    id=recipe_id,
+                    cuisine=entity.cuisine,
+                    source_pdf=source_pdf,
+                    page_number=page_number,
                 )
 
-            # Create Tag nodes and HAS_TAG edges
-            for tag in entity.tags:
-                session.run(
-                    """
-                    MERGE (t:Tag {name: $tag_name})
-                    WITH t
-                    MATCH (r:Recipe {name: $recipe_name})
-                    MERGE (r)-[:HAS_TAG]->(t)
-                    """,
-                    tag_name=tag.name,
-                    recipe_name=entity.recipe_name,
-                )
+                # Create Ingredient nodes and CONTAINS_INGREDIENT edges
+                for ingredient in entity.ingredients:
+                    tx.run(
+                        """
+                        MERGE (i:Ingredient {name: $ing_name})
+                        WITH i
+                        MATCH (r:Recipe {name: $recipe_name})
+                        MERGE (r)-[rel:CONTAINS_INGREDIENT]->(i)
+                        ON CREATE SET
+                            rel.quantity = $quantity,
+                            rel.unit = $unit
+                        """,
+                        ing_name=ingredient.name,
+                        recipe_name=entity.recipe_name,
+                        quantity=ingredient.quantity,
+                        unit=ingredient.unit,
+                    )
 
-            # Retrieve the actual ID (in case of MERGE hit)
-            result = session.run(
-                "MATCH (r:Recipe {name: $name}) RETURN r.id AS id",
-                name=entity.recipe_name,
-            )
-            record = result.single()
-            if record:
-                recipe_id = record["id"]
+                # Create Tag nodes and HAS_TAG edges
+                for tag in entity.tags:
+                    tx.run(
+                        """
+                        MERGE (t:Tag {name: $tag_name})
+                        WITH t
+                        MATCH (r:Recipe {name: $recipe_name})
+                        MERGE (r)-[:HAS_TAG]->(t)
+                        """,
+                        tag_name=tag.name,
+                        recipe_name=entity.recipe_name,
+                    )
+
+                # Retrieve the actual ID (in case of MERGE hit)
+                result = tx.run(
+                    "MATCH (r:Recipe {name: $name}) RETURN r.id AS id",
+                    name=entity.recipe_name,
+                )
+                record = result.single()
+                if record:
+                    recipe_id = record["id"]
 
         logger.info(
             f"Added recipe '{entity.recipe_name}' with "

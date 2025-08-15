@@ -92,59 +92,65 @@ class IngestionPipeline:
             "image_vectors": 0,
         }
 
-        # === Step 1: Extract text and images ===
-        logger.info("[Step 1/5] Extracting text and images from PDF...")
-        pages = self.extractor.extract(pdf_path)
-        stats["pages_extracted"] = len(pages)
-        logger.info(f"  → Extracted {len(pages)} pages")
+        # === Stream Pages to prevent OOM ===
+        logger.info("Extracting and processing streaming pages...")
+        pages_generator = self.extractor.extract(pdf_path)
+        current_recipe = None
 
-        if not pages:
+        for page in pages_generator:
+            stats["pages_extracted"] += 1
+            logger.info(f"  → Processing page {stats['pages_extracted']}...")
+
+            # === Step 2: Chunk text ===
+            page_chunks = self._chunk_pages([page], pdf_name)
+            stats["chunks_created"] += len(page_chunks)
+
+            if not page_chunks and not page.image_paths:
+                continue
+
+            # === Step 3: Extract entities via LLM ===
+            chunk_texts = [c.text for c in page_chunks]
+            entities = []
+            if chunk_texts:
+                entities = self.entity_extractor.extract_batch(chunk_texts)
+                stats["entities_extracted"] += len(entities)
+
+            # === Step 4: Build knowledge graph ===
+            recipe_id_map = {}
+            if entities:
+                recipe_id_map = self.graph_builder.add_recipes(
+                    entities, source_pdf=pdf_name
+                )
+                stats["recipes_added"] += len(recipe_id_map)
+
+            # Assign recipe names to chunks for cross-referencing continuously
+            for chunk in page_chunks:
+                for entity in entities:
+                    if entity.recipe_name.lower() in chunk.text.lower():
+                        current_recipe = entity.recipe_name
+                        break
+                if current_recipe:
+                    chunk.recipe_name = current_recipe
+
+            # === Step 5: Embed and store vectors ===
+            if page_chunks:
+                text_count = self.vector_store.embed_and_store_chunks(
+                    page_chunks, recipe_id_map
+                )
+                stats["text_vectors"] += text_count
+
+            if page.image_paths:
+                image_metadata = self._collect_image_metadata(
+                    [page], pdf_name, recipe_id_map, page_chunks
+                )
+                image_count = self.vector_store.embed_and_store_images(
+                    image_metadata, recipe_id_map
+                )
+                stats["image_vectors"] += image_count
+
+        if stats["pages_extracted"] == 0:
             logger.warning(f"No content extracted from {pdf_name}")
             return stats
-
-        # === Step 2: Chunk text ===
-        logger.info("[Step 2/5] Chunking text...")
-        all_chunks = self._chunk_pages(pages, pdf_name)
-        stats["chunks_created"] = len(all_chunks)
-        logger.info(f"  → Created {len(all_chunks)} text chunks")
-
-        # === Step 3: Extract entities via LLM ===
-        logger.info("[Step 3/5] Extracting entities with LLM...")
-        chunk_texts = [c.text for c in all_chunks]
-        entities = self.entity_extractor.extract_batch(chunk_texts)
-        stats["entities_extracted"] = len(entities)
-        logger.info(f"  → Found {len(entities)} recipe entities")
-
-        # === Step 4: Build knowledge graph ===
-        logger.info("[Step 4/5] Building knowledge graph in Neo4j...")
-        recipe_id_map = self.graph_builder.add_recipes(
-            entities, source_pdf=pdf_name
-        )
-        stats["recipes_added"] = len(recipe_id_map)
-        logger.info(f"  → Added {len(recipe_id_map)} recipes to graph")
-
-        # Assign recipe names to chunks for cross-referencing
-        self._assign_recipe_names(all_chunks, entities)
-
-        # === Step 5: Embed and store vectors ===
-        logger.info("[Step 5/5] Embedding and storing vectors in Qdrant...")
-
-        # Text vectors
-        text_count = self.vector_store.embed_and_store_chunks(
-            all_chunks, recipe_id_map
-        )
-        stats["text_vectors"] = text_count
-
-        # Image vectors
-        image_metadata = self._collect_image_metadata(
-            pages, pdf_name, recipe_id_map, all_chunks
-        )
-        image_count = self.vector_store.embed_and_store_images(
-            image_metadata, recipe_id_map
-        )
-        stats["image_vectors"] = image_count
-
-        logger.info(f"  → Stored {text_count} text + {image_count} image vectors")
 
         logger.info(f"{'=' * 60}")
         logger.info(f"Ingestion complete: {pdf_name}")
@@ -196,15 +202,22 @@ class IngestionPipeline:
         entities: list,
     ):
         """
-        Best-effort assignment of recipe names to text chunks.
-        Matches chunks to entities based on text content overlap.
+        Stateful assignment of recipe names to text chunks.
+        When a chunk mentions a recipe name, all subsequent chunks 
+        are assigned to that recipe until a new recipe is encountered.
+        This preserves data lineage for RAG without orphaned chunks.
         """
+        current_recipe = None
         for chunk in chunks:
+            # Check if any recipe is explicitly mentioned in this chunk
             for entity in entities:
-                # If the recipe name appears in the chunk text, link them
                 if entity.recipe_name.lower() in chunk.text.lower():
-                    chunk.recipe_name = entity.recipe_name
+                    current_recipe = entity.recipe_name
                     break
+                    
+            # Assign the current active recipe
+            if current_recipe:
+                chunk.recipe_name = current_recipe
 
     def _collect_image_metadata(
         self,
