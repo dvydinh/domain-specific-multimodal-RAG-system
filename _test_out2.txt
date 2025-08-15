@@ -1,0 +1,63 @@
+============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0 -- D:\python\python.exe
+cachedir: .pytest_cache
+rootdir: D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system
+plugins: anyio-4.12.1, langsmith-0.7.22
+collecting ... collected 11 items
+
+tests/test_chunker.py::TestTextChunker::test_basic_chunking PASSED       [  9%]
+tests/test_chunker.py::TestTextChunker::test_multi_chunk_splitting PASSED [ 18%]
+tests/test_chunker.py::TestTextChunker::test_overlap_content PASSED      [ 27%]
+tests/test_chunker.py::TestTextChunker::test_empty_text_returns_nothing PASSED [ 36%]
+tests/test_chunker.py::TestTextChunker::test_chunk_index_sequential PASSED [ 45%]
+tests/test_chunker.py::TestTextChunker::test_chunk_metadata_preserved PASSED [ 54%]
+tests/test_chunker.py::TestTextChunker::test_overlap_must_be_less_than_size PASSED [ 63%]
+tests/test_chunker.py::TestTextChunker::test_chunk_pages PASSED          [ 72%]
+tests/test_chunker.py::TestTextChunker::test_sentence_boundary_awareness PASSED [ 81%]
+tests/test_chunker.py::TestTextChunker::test_bbox_stop_words_prevented FAILED [ 90%]
+tests/test_chunker.py::TestTextChunker::test_performance_no_blocking PASSED [100%]
+
+================================== FAILURES ===================================
+_______________ TestTextChunker.test_bbox_stop_words_prevented ________________
+
+self = <tests.test_chunker.TestTextChunker object at 0x000002235CA49130>
+
+    def test_bbox_stop_words_prevented(self):
+        """Bbox calculation should use fast string index mapping, not set overlap."""
+        # This replicates the 'Gà và heo' challenge
+        page = PageContent(
+            page_number=1,
+            text="G\xe0 v\xe0 heo\\n\\nG\xe0 l\xe0 chim, heo l\xe0 l\u1ee3n. Hai v\xe0 hai l\xe0 b\u1ed1n.",
+            blocks=[
+                TextBlock(text="Gà và heo", bbox=(0,0,10,10), start_idx=0, end_idx=9),
+                TextBlock(
+                    text="G\xe0 l\xe0 chim, heo l\xe0 l\u1ee3n. Hai v\xe0 hai l\xe0 b\u1ed1n.",
+                    bbox=(100,100,200,200),
+                    start_idx=11,
+                    end_idx=53
+                )
+            ]
+        )
+        # Chunker size 100 should keep the first block intact or at least the first sentence
+        chunker = TextChunker(chunk_size=100)
+        chunks = chunker.chunk_pages([page])
+    
+        # Find the chunk containing exactly "Gà và heo"
+>       target_chunk = next(c for c in chunks if "Gà và heo" in c.text and "Hai và hai" not in c.text)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       StopIteration
+
+tests\test_chunker.py:126: StopIteration
+============================== warnings summary ===============================
+..\..\..\python\Lib\site-packages\langchain_core\_api\deprecation.py:25
+  D:\python\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+    from pydantic.v1.fields import FieldInfo as FieldInfoV1
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_chunker.py::TestTextChunker::test_bbox_stop_words_prevented
+=================== 1 failed, 10 passed, 1 warning in 6.95s ===================
+
+---STDERR---
+
+EXIT: 1

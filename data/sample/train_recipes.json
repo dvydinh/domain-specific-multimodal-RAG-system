@@ -1,0 +1,196 @@
+[
+  {
+    "recipe_name": "Tonkotsu Ramen",
+    "cuisine": "Japanese",
+    "ingredients": [
+      {
+        "name": "pork bone",
+        "quantity": "1 kg"
+      },
+      {
+        "name": "soy sauce",
+        "quantity": "3 tbsp"
+      },
+      {
+        "name": "mirin",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "garlic",
+        "quantity": "4 cloves"
+      },
+      {
+        "name": "ginger",
+        "quantity": "1 piece"
+      },
+      {
+        "name": "ramen noodles",
+        "quantity": "400g"
+      },
+      {
+        "name": "chashu pork",
+        "quantity": "200g"
+      },
+      {
+        "name": "scallion",
+        "quantity": "2 stalks"
+      },
+      {
+        "name": "soft-boiled egg",
+        "quantity": "2"
+      },
+      {
+        "name": "nori",
+        "quantity": "4 sheets"
+      }
+    ],
+    "tags": [
+      "Japanese",
+      "Spicy",
+      "Comfort Food",
+      "Pork"
+    ],
+    "instructions": "1. Boil pork bones in water for 12 hours on medium-low heat, skimming impurities regularly. 2. Strain the broth and season with soy sauce and mirin. 3. Cook ramen noodles according to package directions. 4. Slice chashu pork thinly. 5. Assemble: place noodles in bowl, ladle hot broth over, top with chashu, soft-boiled egg halves, sliced scallions, and nori sheets."
+  },
+  {
+    "recipe_name": "Pad Thai",
+    "cuisine": "Thai",
+    "ingredients": [
+      {
+        "name": "rice noodles",
+        "quantity": "200g"
+      },
+      {
+        "name": "shrimp",
+        "quantity": "150g"
+      },
+      {
+        "name": "tofu",
+        "quantity": "100g"
+      },
+      {
+        "name": "bean sprouts",
+        "quantity": "1 cup"
+      },
+      {
+        "name": "peanuts",
+        "quantity": "3 tbsp"
+      },
+      {
+        "name": "fish sauce",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "tamarind paste",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "palm sugar",
+        "quantity": "1 tbsp"
+      },
+      {
+        "name": "lime",
+        "quantity": "1"
+      },
+      {
+        "name": "garlic",
+        "quantity": "3 cloves"
+      },
+      {
+        "name": "egg",
+        "quantity": "2"
+      }
+    ],
+    "tags": [
+      "Thai",
+      "Seafood",
+      "Street Food"
+    ],
+    "instructions": "1. Soak rice noodles in warm water for 30 minutes until pliable. 2. Mix sauce: combine fish sauce, tamarind paste, and palm sugar. 3. Heat oil in wok over high heat. Stir-fry garlic, then add shrimp until pink. 4. Push shrimp aside, crack eggs into wok and scramble. 5. Add drained noodles and sauce, toss vigorously. 6. Add tofu and bean sprouts, toss briefly. 7. Serve with crushed peanuts and lime wedge."
+  },
+  {
+    "recipe_name": "Margherita Pizza",
+    "cuisine": "Italian",
+    "ingredients": [
+      {
+        "name": "pizza dough",
+        "quantity": "1 ball"
+      },
+      {
+        "name": "san marzano tomatoes",
+        "quantity": "200g"
+      },
+      {
+        "name": "fresh mozzarella",
+        "quantity": "150g"
+      },
+      {
+        "name": "fresh basil",
+        "quantity": "10 leaves"
+      },
+      {
+        "name": "olive oil",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "salt",
+        "quantity": "to taste"
+      }
+    ],
+    "tags": [
+      "Italian",
+      "Vegetarian",
+      "Classic"
+    ],
+    "instructions": "1. Preheat oven to 250\u00b0C (480\u00b0F) with pizza stone inside. 2. Crush San Marzano tomatoes by hand, season with salt. 3. Stretch dough into a 12-inch circle on floured surface. 4. Spread crushed tomatoes evenly, leaving a 1-inch border. 5. Tear mozzarella and distribute over sauce. 6. Bake for 8-10 minutes until crust is charred and cheese bubbles. 7. Remove, drizzle with olive oil, and top with fresh basil leaves."
+  },
+  {
+    "recipe_name": "Green Curry",
+    "cuisine": "Thai",
+    "ingredients": [
+      {
+        "name": "green curry paste",
+        "quantity": "3 tbsp"
+      },
+      {
+        "name": "coconut milk",
+        "quantity": "400ml"
+      },
+      {
+        "name": "chicken breast",
+        "quantity": "300g"
+      },
+      {
+        "name": "thai eggplant",
+        "quantity": "4"
+      },
+      {
+        "name": "bamboo shoots",
+        "quantity": "100g"
+      },
+      {
+        "name": "thai basil",
+        "quantity": "1 cup"
+      },
+      {
+        "name": "fish sauce",
+        "quantity": "2 tbsp"
+      },
+      {
+        "name": "palm sugar",
+        "quantity": "1 tbsp"
+      },
+      {
+        "name": "kaffir lime leaves",
+        "quantity": "4"
+      }
+    ],
+    "tags": [
+      "Thai",
+      "Spicy",
+      "Curry",
+      "Gluten-Free"
+    ],
+    "instructions": "1. Heat thick coconut cream in wok until oil separates. 2. Fry green curry paste in the oil until fragrant (2 minutes). 3. Add sliced chicken, stir until sealed. 4. Pour in remaining coconut milk, bring to simmer. 5. Add eggplant and bamboo shoots, cook 5 minutes. 6. Season with fish sauce and palm sugar. 7. Add torn kaffir lime leaves and Thai basil. Serve over jasmine rice."
+  }
+]

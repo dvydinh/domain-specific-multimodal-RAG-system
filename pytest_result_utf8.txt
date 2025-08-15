@@ -1,0 +1,116 @@
+﻿============================= test session starts =============================
+platform win32 -- Python 3.14.2, pytest-9.0.2, pluggy-1.6.0
+rootdir: D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system
+plugins: anyio-4.12.1, langsmith-0.7.22
+collected 0 items / 1 error
+
+=================================== ERRORS ====================================
+___________________ ERROR collecting tests/test_chunker.py ____________________
+ImportError while importing test module 'D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\tests\test_chunker.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\python\Lib\importlib\__init__.py:88: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tests\test_chunker.py:10: in <module>
+    from backend.ingestion.chunker import TextChunker
+backend\ingestion\__init__.py:2: in <module>
+    from backend.ingestion.pipeline import IngestionPipeline
+backend\ingestion\pipeline.py:16: in <module>
+    from backend.ingestion.extractor import PDFExtractor, PageContent
+backend\ingestion\extractor.py:14: in <module>
+    import fitz  # PyMuPDF
+    ^^^^^^^^^^^
+D:\python\Lib\site-packages\fitz\__init__.py:2: in <module>
+    import tools
+E   ModuleNotFoundError: No module named 'tools'
+============================== warnings summary ===============================
+backend\config.py:15
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:15: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    openai_api_key: str = Field(..., env="OPENAI_API_KEY")
+
+backend\config.py:16
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:16: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    openai_model: str = Field(default="gpt-4o-mini", env="OPENAI_MODEL")
+
+backend\config.py:17
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:17: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    openai_embedding_model: str = Field(
+
+backend\config.py:22
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:22: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    neo4j_uri: str = Field(default="bolt://localhost:7687", env="NEO4J_URI")
+
+backend\config.py:23
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:23: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    neo4j_user: str = Field(default="neo4j", env="NEO4J_USER")
+
+backend\config.py:24
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:24: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    neo4j_password: str = Field(default="ragpassword", env="NEO4J_PASSWORD")
+
+backend\config.py:27
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:27: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    qdrant_host: str = Field(default="localhost", env="QDRANT_HOST")
+
+backend\config.py:28
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:28: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
+
+backend\config.py:29
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:29: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    qdrant_text_collection: str = Field(
+
+backend\config.py:32
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:32: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    qdrant_image_collection: str = Field(
+
+backend\config.py:37
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:37: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    text_embedding_model: str = Field(
+
+backend\config.py:40
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:40: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    clip_model: str = Field(default="ViT-B-32", env="CLIP_MODEL")
+
+backend\config.py:41
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:41: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    clip_pretrained: str = Field(
+
+backend\config.py:46
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:46: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    chunk_size: int = Field(default=500, env="CHUNK_SIZE")
+
+backend\config.py:47
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:47: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    chunk_overlap: int = Field(default=50, env="CHUNK_OVERLAP")
+
+backend\config.py:48
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:48: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    pdf_input_dir: str = Field(default="data/raw", env="PDF_INPUT_DIR")
+
+backend\config.py:49
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:49: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    image_output_dir: str = Field(default="data/images", env="IMAGE_OUTPUT_DIR")
+
+backend\config.py:52
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:52: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_host: str = Field(default="0.0.0.0", env="API_HOST")
+
+backend\config.py:53
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:53: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    api_port: int = Field(default=8000, env="API_PORT")
+
+backend\config.py:54
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:54: PydanticDeprecatedSince20: Using extra keyword arguments on `Field` is deprecated and will be removed. Use `json_schema_extra` instead. (Extra keys: 'env'). Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    cors_origins: str = Field(
+
+backend\config.py:11
+  D:\DE VKEE\PROJECTS\domain-specific multimodal RAG system\backend\config.py:11: PydanticDeprecatedSince20: Support for class-based `config` is deprecated, use ConfigDict instead. Deprecated in Pydantic V2.0 to be removed in V3.0. See Pydantic V2 Migration Guide at https://errors.pydantic.dev/2.12/migration/
+    class Settings(BaseSettings):
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+ERROR tests/test_chunker.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+======================== 21 warnings, 1 error in 0.18s ========================

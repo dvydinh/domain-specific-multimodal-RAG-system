@@ -1,0 +1,52 @@
+﻿.........F.                                                              [100%]
+================================== FAILURES ===================================
+_______________ TestTextChunker.test_bbox_stop_words_prevented ________________
+
+self = <tests.test_chunker.TestTextChunker object at 0x000001A5F78C5400>
+
+    def test_bbox_stop_words_prevented(self):
+        """Bbox calculation should use fast string index mapping, not set overlap."""
+        # Block 1: short text at the top of the page
+        block1_text = "Gα vα heo"
+        # Block 2: long text that will force a separate chunk
+        block2_text = "G\xe0 l\xe0 chim, heo l\xe0 l\u1ee3n. Hai v\xe0 hai l\xe0 b\u1ed1n. " + "Th\xeam n\u1ed9i dung d\xe0i h\u01a1n \u0111\u1ec3 t\u1ea1o chunk ri\xeang bi\u1ec7t. " * 5
+    
+        full_text = block1_text + "\n\n" + block2_text
+        block1_end = len(block1_text)
+        block2_start = block1_end + 2  # +2 for \n\n
+    
+        page = PageContent(
+            page_number=1,
+            text=full_text,
+            blocks=[
+                TextBlock(text=block1_text, bbox=(0,0,10,10), start_idx=0, end_idx=block1_end),
+                TextBlock(
+                    text=block2_text,
+                    bbox=(100,100,200,200),
+                    start_idx=block2_start,
+                    end_idx=block2_start + len(block2_text)
+                )
+            ]
+        )
+        # Use small chunk_size to guarantee the blocks end up in separate chunks
+        chunker = TextChunker(chunk_size=50, chunk_overlap=10)
+        chunks = chunker.chunk_pages([page])
+    
+        # The first chunk must contain block1 text and its bbox must be ONLY (0,0,10,10)
+        first_chunk = chunks[0]
+        assert "Gα vα heo" in first_chunk.text
+        assert first_chunk.bbox is not None
+        # bbox MUST NOT be inflated to (0,0,200,200) just because stop-word 'vα' appears in block2
+>       assert first_chunk.bbox[2] <= 10.0 and first_chunk.bbox[3] <= 10.0
+E       assert (200 <= 10.0)
+
+tests\test_chunker.py:138: AssertionError
+============================== warnings summary ===============================
+..\..\..\python\Lib\site-packages\langchain_core\_api\deprecation.py:25
+  D:\python\Lib\site-packages\langchain_core\_api\deprecation.py:25: UserWarning: Core Pydantic V1 functionality isn't compatible with Python 3.14 or greater.
+    from pydantic.v1.fields import FieldInfo as FieldInfoV1
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_chunker.py::TestTextChunker::test_bbox_stop_words_prevented
+1 failed, 10 passed, 1 warning in 7.54s
