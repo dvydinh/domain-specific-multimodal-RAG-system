@@ -1,0 +1,30 @@
+[
+  {
+    "question": "What are the main ingredients for Beef Picadillo?",
+    "ground_truth": "The ingredients for Beef Picadillo include 500g ground beef, 2 cubed potatoes, 1 diced onion, 2 garlic cloves, 1/2 cup raisins, 1/2 cup olives, 1 tsp cumin, salt, and pepper."
+  },
+  {
+    "question": "How long should the beef simmer in the Picadillo recipe?",
+    "ground_truth": "The beef should be simmered for 20-30 minutes until the potatoes are tender and the flavors have melded."
+  },
+  {
+    "question": "What spices are used in the Chicken Curry recipe?",
+    "ground_truth": "The spices required are 2 tbsp curry powder, 1 tsp turmeric, 1 tsp cumin, along with fresh ginger and garlic."
+  },
+  {
+    "question": "Is the Chicken Curry recipe dairy-free?",
+    "ground_truth": "Yes, the recipe uses coconut milk instead of dairy products, making it a dairy-free dish."
+  },
+  {
+    "question": "How much nutmeg is required for the Beef Picadillo?",
+    "ground_truth": "Based on the provided documents, I cannot find this information."
+  },
+  {
+    "question": "What are the steps to prepare Veggie Lasagna?",
+    "ground_truth": "Based on the provided documents, I cannot find this information."
+  },
+  {
+    "question": "Does the Chicken Curry use ricotta cheese?",
+    "ground_truth": "Based on the provided documents, I cannot find this information."
+  }
+]
