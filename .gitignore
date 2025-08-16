@@ -54,3 +54,22 @@ neo4j_data/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# --- Custom Ignored Files ---
+# Logs and test outputs
+*.log
+*out.txt
+*out*.txt
+test_*.txt
+_test*.txt
+ts.txt
+pytest_*.txt
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+.env.local

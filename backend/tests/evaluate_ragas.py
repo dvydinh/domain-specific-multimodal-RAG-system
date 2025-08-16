@@ -8,7 +8,7 @@ proving that Hybrid minimizes Hallucination compared to pure Vector search.
 
 import sys
 import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 import asyncio
 from datasets import Dataset
@@ -32,7 +32,7 @@ def generate_synthetic_dataset(n: int = 50) -> list[dict]:
     print(f"Algorithmic generation of {n} evaluation Q&As directly from recipes.json...")
     
     # 1. Load source data dynamically to ensure transparent lineage from HOLD-OUT set
-    file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "sample", "eval_recipes.json")
+    file_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "data", "sample", "eval_recipes.json")
     with open(file_path, "r", encoding="utf-8") as f:
         data = json.load(f)
         
