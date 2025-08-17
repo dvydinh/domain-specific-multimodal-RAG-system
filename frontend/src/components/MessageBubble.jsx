@@ -12,7 +12,7 @@ export default function MessageBubble({ message }) {
   const renderContent = () => {
     if (isUser) return message.content
 
-    // Parse citation markers [1], [2], etc. and make them interactive
+    // Parse citation markers [1], [2], etc.
     const parts = message.content.split(/(\[\d+\])/g)
 
     return parts.map((part, idx) => {
@@ -59,7 +59,7 @@ export default function MessageBubble({ message }) {
     <>
       <div className={`message message--${message.role}`}>
         <div className="message__avatar">
-          {isUser ? '👤' : '🍜'}
+          {isUser ? 'U' : 'R'}
         </div>
         <div>
           <div className="message__content">
@@ -69,10 +69,10 @@ export default function MessageBubble({ message }) {
             <span>{message.timestamp}</span>
             {getQueryTypeBadge()}
             {!isUser && message.graphCount > 0 && (
-              <span>📊 {message.graphCount} graph</span>
+              <span>{message.graphCount} graph</span>
             )}
             {!isUser && message.vectorCount > 0 && (
-              <span>🔍 {message.vectorCount} vector</span>
+              <span>{message.vectorCount} vector</span>
             )}
           </div>
         </div>

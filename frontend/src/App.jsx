@@ -6,6 +6,19 @@ const API_BASE = '/api'
 export default function App() {
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
+  const [theme, setTheme] = useState(() => {
+    return localStorage.getItem('rag-theme') || 'light'
+  })
+  const [uploadToast, setUploadToast] = useState(null)
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('rag-theme', theme)
+  }, [theme])
+
+  const toggleTheme = () => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light')
+  }
 
   const handleSend = async (question) => {
     const userMessage = {
@@ -47,7 +60,7 @@ export default function App() {
       const errorMessage = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `Sorry, something went wrong: ${err.message}. Make sure the backend is running.`,
+        content: `Something went wrong: ${err.message}. Make sure the backend server is running.`,
         citations: {},
         queryType: 'error',
         timestamp: new Date().toLocaleTimeString(),
@@ -58,21 +71,54 @@ export default function App() {
     }
   }
 
+  const handleUpload = async (file) => {
+    if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+      setUploadToast('Only PDF files are accepted')
+      setTimeout(() => setUploadToast(null), 3000)
+      return
+    }
+
+    const form = new FormData()
+    form.append('file', file)
+
+    try {
+      const res = await fetch(`${API_BASE}/upload`, {
+        method: 'POST',
+        body: form,
+      })
+      const data = await res.json()
+      setUploadToast(data.message || 'Upload accepted')
+    } catch (err) {
+      setUploadToast(`Upload failed: ${err.message}`)
+    }
+    setTimeout(() => setUploadToast(null), 3000)
+  }
+
   return (
     <div className="app">
       <header className="header">
         <div className="header__brand">
-          <div className="header__icon">🍜</div>
+          <div className="header__logo" />
           <div>
             <div className="header__title">Recipe RAG</div>
             <div className="header__subtitle">
-              Multimodal Knowledge Graph + Vector Search
+              Knowledge Graph + Vector Search
             </div>
           </div>
         </div>
-        <div className="header__status">
-          <span className="status-dot" />
-          System Online
+        <div className="header__actions">
+          <div className="header__status">
+            <span className="status-dot" />
+            Online
+          </div>
+          <button
+            className="theme-toggle"
+            onClick={toggleTheme}
+            aria-label="Toggle theme"
+            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
+          >
+            <span className="theme-toggle__knob" />
+          </button>
         </div>
       </header>
 
@@ -80,7 +126,12 @@ export default function App() {
         messages={messages}
         isLoading={isLoading}
         onSend={handleSend}
+        onUpload={handleUpload}
       />
+
+      {uploadToast && (
+        <div className="upload-toast">{uploadToast}</div>
+      )}
     </div>
   )
 }

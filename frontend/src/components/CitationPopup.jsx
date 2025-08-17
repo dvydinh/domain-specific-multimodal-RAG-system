@@ -24,7 +24,7 @@ export default function CitationPopup({ citation, onClose }) {
       >
         <div className="citation-popup__header">
           <div className="citation-popup__title">
-            📄 Source [{citation.id}]
+            Source [{citation.id}]
           </div>
           <button
             className="citation-popup__close"
@@ -37,7 +37,7 @@ export default function CitationPopup({ citation, onClose }) {
 
         {citation.recipe_name && (
           <div className="citation-popup__recipe">
-            🍽️ {citation.recipe_name}
+            {citation.recipe_name}
           </div>
         )}
 
@@ -56,10 +56,10 @@ export default function CitationPopup({ citation, onClose }) {
 
         <div className="citation-popup__source">
           {citation.source_pdf && (
-            <span>📁 {citation.source_pdf}</span>
+            <span>{citation.source_pdf}</span>
           )}
           {citation.page_number && (
-            <span>📄 Page {citation.page_number}</span>
+            <span>Page {citation.page_number}</span>
           )}
         </div>
       </div>
