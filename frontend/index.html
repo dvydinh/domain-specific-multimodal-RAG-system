@@ -5,9 +5,56 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Multimodal RAG system for recipe search with knowledge graph and vector retrieval" />
     <title>Recipe RAG — Multimodal Search</title>
+    <link rel="icon" type="image/png" href="/strawberry.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+      /* Animated favicon wobble via canvas */
+      @keyframes favicon-bounce {
+        0%, 100% { transform: rotate(0deg); }
+        25% { transform: rotate(8deg); }
+        75% { transform: rotate(-8deg); }
+      }
+    </style>
+    <script>
+      // Animated favicon: subtle wobble effect
+      (function animateFavicon() {
+        const img = new Image();
+        img.src = '/strawberry.png';
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = 64;
+          canvas.height = 64;
+          const ctx = canvas.getContext('2d');
+          let angle = 0;
+          let direction = 1;
+
+          function drawFrame() {
+            ctx.clearRect(0, 0, 64, 64);
+            ctx.save();
+            ctx.translate(32, 32);
+            ctx.rotate(angle * Math.PI / 180);
+            ctx.drawImage(img, -28, -28, 56, 56);
+            ctx.restore();
+
+            const link = document.querySelector("link[rel='icon']") || document.createElement('link');
+            link.rel = 'icon';
+            link.href = canvas.toDataURL('image/png');
+            if (!document.querySelector("link[rel='icon']")) {
+              document.head.appendChild(link);
+            }
+
+            angle += direction * 0.4;
+            if (angle > 10) direction = -1;
+            if (angle < -10) direction = 1;
+
+            requestAnimationFrame(drawFrame);
+          }
+          drawFrame();
+        };
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

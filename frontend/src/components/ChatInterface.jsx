@@ -8,10 +8,11 @@ const EXAMPLE_QUERIES = [
   "List all recipes that contain tofu and are gluten-free",
 ]
 
-export default function ChatInterface({ messages, isLoading, onSend }) {
+export default function ChatInterface({ messages, isLoading, onSend, onUpload }) {
   const [input, setInput] = useState('')
   const messagesEndRef = useRef(null)
   const inputRef = useRef(null)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -37,6 +38,14 @@ export default function ChatInterface({ messages, isLoading, onSend }) {
     }
   }
 
+  const handleFileChange = (e) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      onUpload(file)
+      e.target.value = ''
+    }
+  }
+
   const isEmpty = messages.length === 0
 
   return (
@@ -44,12 +53,12 @@ export default function ChatInterface({ messages, isLoading, onSend }) {
       <div className={`chat-messages ${isEmpty ? 'chat-messages--empty' : ''}`}>
         {isEmpty ? (
           <div className="welcome">
-            <div className="welcome__icon">🔍</div>
+            <div className="welcome__visual" />
             <h1 className="welcome__title">What would you like to cook?</h1>
             <p className="welcome__desc">
-              Ask me about recipes, ingredients, cooking techniques, or dietary
-              preferences. I search across a knowledge graph and vector database
-              to give you precise, cited answers.
+              Ask about recipes, ingredients, or cooking techniques.
+              Answers are sourced from a knowledge graph and vector database
+              with precise citations.
             </p>
             <div className="welcome__examples">
               {EXAMPLE_QUERIES.map((q, i) => (
@@ -70,7 +79,7 @@ export default function ChatInterface({ messages, isLoading, onSend }) {
             ))}
             {isLoading && (
               <div className="message message--assistant">
-                <div className="message__avatar">🍜</div>
+                <div className="message__avatar">R</div>
                 <div className="message__content">
                   <div className="loading-dots">
                     <span></span>
@@ -87,6 +96,15 @@ export default function ChatInterface({ messages, isLoading, onSend }) {
 
       <div className="chat-input-area">
         <form className="chat-input-form" onSubmit={handleSubmit}>
+          <div className="upload-btn" title="Upload a PDF cookbook">
+            <span>+</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf"
+              onChange={handleFileChange}
+            />
+          </div>
           <textarea
             ref={inputRef}
             className="chat-input"
@@ -104,7 +122,7 @@ export default function ChatInterface({ messages, isLoading, onSend }) {
             disabled={isLoading || !input.trim()}
             id="chat-submit"
           >
-            ➤
+            &#10148;
           </button>
         </form>
       </div>

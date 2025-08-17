@@ -174,3 +174,54 @@ def _check_qdrant() -> str:
         return "up"
     except Exception:
         return "down"
+
+
+# ================================================================
+# Document Upload
+# ================================================================
+
+from fastapi import UploadFile, File, BackgroundTasks
+from backend.ingestion.pipeline import IngestionPipeline
+import shutil
+
+def _run_ingestion(file_path: str):
+    """Background task: run the full ingestion pipeline on the uploaded PDF."""
+    try:
+        pipeline = IngestionPipeline()
+        stats = pipeline.ingest(file_path)
+        logger.info(f"Background ingestion completed: {stats}")
+    except Exception as e:
+        logger.error(f"Background ingestion failed for {file_path}: {e}", exc_info=True)
+
+
+@router.post("/upload")
+async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """
+    Upload a PDF cookbook document for ingestion.
+
+    The file will be saved to data/raw/ and the ingestion pipeline
+    (extract → chunk → entity → graph → embed) will run in the background.
+    """
+    if not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(status_code=400, detail="Only PDF files are accepted.")
+
+    # Save file safely
+    raw_dir = Path("data/raw")
+    raw_dir.mkdir(parents=True, exist_ok=True)
+    dest = raw_dir / file.filename
+
+    try:
+        with open(dest, "wb") as buf:
+            shutil.copyfileobj(file.file, buf)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+
+    # Dispatch ingestion as background task
+    background_tasks.add_task(_run_ingestion, str(dest))
+
+    return {
+        "status": "accepted",
+        "filename": file.filename,
+        "message": "File uploaded successfully. Ingestion pipeline started in background."
+    }
+
