@@ -6,63 +6,9 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800;900&display=swap');
 
 /* ============================================================
-   LIGHT THEME — Pastel Strawberry (high contrast blocks)
+   DARK THEME — Deep Strawberry (Only Theme)
    ============================================================ */
-:root,
-[data-theme='light'] {
-  --bg-primary: #fff0f3;
-  --bg-secondary: #ffffff;
-  --bg-tertiary: #ffd6e0;
-  --bg-glass: rgba(255, 255, 255, 0.88);
-  --bg-glass-hover: rgba(255, 214, 224, 0.7);
-  --bg-card: #ffffff;
-
-  --text-primary: #2e0a18;
-  --text-secondary: #6b3a50;
-  --text-muted: #a87490;
-
-  --accent-primary: #e91e63;
-  --accent-primary-hover: #f06292;
-  --accent-secondary: #f48fb1;
-  --accent-gradient: linear-gradient(135deg, #f06292 0%, #e91e63 50%, #ec407a 100%);
-  --accent-soft: rgba(233, 30, 99, 0.08);
-
-  --border-color: rgba(233, 30, 99, 0.14);
-  --border-glow: rgba(233, 30, 99, 0.3);
-  --border-card: rgba(233, 30, 99, 0.1);
-
-  --success: #66bb6a;
-
-  --shadow-sm: 0 2px 12px rgba(233, 30, 99, 0.08);
-  --shadow-md: 0 6px 24px rgba(233, 30, 99, 0.1);
-  --shadow-lg: 0 12px 48px rgba(233, 30, 99, 0.12);
-  --shadow-glow: 0 0 28px rgba(233, 30, 99, 0.14);
-  --shadow-card: 0 4px 20px rgba(233, 30, 99, 0.07), 0 1px 4px rgba(233,30,99,0.05);
-  --shadow-bubble: 0 3px 14px rgba(233, 30, 99, 0.1);
-
-  --user-bubble: linear-gradient(135deg, #ec407a 0%, #e91e63 100%);
-  --user-bubble-text: #ffffff;
-  --assistant-bubble: #ffffff;
-  --assistant-border: rgba(233, 30, 99, 0.1);
-
-  --input-bg: #fff7f9;
-  --input-border: rgba(233, 30, 99, 0.15);
-  --upload-bg: rgba(255, 214, 224, 0.4);
-  --upload-border: rgba(233, 30, 99, 0.22);
-
-  --scrollbar-thumb: rgba(233, 30, 99, 0.2);
-  --overlay-bg: rgba(255, 240, 243, 0.8);
-
-  --blob-1: rgba(233, 30, 99, 0.04);
-  --blob-2: rgba(244, 143, 177, 0.06);
-  --blob-3: rgba(255, 214, 224, 0.08);
-  --seed-color: rgba(245, 195, 68, 0.25);
-}
-
-/* ============================================================
-   DARK THEME — Deep Strawberry
-   ============================================================ */
-[data-theme='dark'] {
+:root, [data-theme='dark'] {
   --bg-primary: #140810;
   --bg-secondary: #221016;
   --bg-tertiary: #361824;
@@ -109,7 +55,7 @@
   --blob-1: rgba(255, 64, 129, 0.03);
   --blob-2: rgba(233, 30, 99, 0.04);
   --blob-3: rgba(194, 24, 91, 0.05);
-  --seed-color: rgba(255, 210, 80, 0.18);
+  --seed-color: rgba(255, 210, 80, 0.3);
 }
 
 /* ============================================================
@@ -342,57 +288,8 @@ body::before {
 }
 
 /* ============================================================
-   Theme Toggle — Jelly pill
+   Theme Toggle (Removed)
    ============================================================ */
-
-.theme-toggle {
-  width: 48px;
-  height: 26px;
-  background: var(--bg-tertiary);
-  border: 1.5px solid var(--border-color);
-  border-radius: var(--radius-full);
-  cursor: pointer;
-  position: relative;
-  transition: all var(--transition-bounce);
-  flex-shrink: 0;
-}
-
-.theme-toggle:hover {
-  border-color: var(--border-glow);
-  transform: scale(1.08);
-}
-
-.theme-toggle:active {
-  transform: scale(0.95);
-}
-
-.theme-toggle__knob {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  background: var(--accent-gradient);
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  transition: transform var(--transition-jelly);
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-}
-
-/* Candy gloss on knob */
-.theme-toggle__knob::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  left: 4px;
-  width: 8px;
-  height: 5px;
-  background: rgba(255,255,255,0.35);
-  border-radius: 50%;
-}
-
-[data-theme='dark'] .theme-toggle__knob {
-  transform: translateX(22px);
-}
 
 /* ============================================================
    Chat Container
@@ -402,7 +299,7 @@ body::before {
   flex: 1;
   display: flex;
   flex-direction: column;
-  background: var(--bg-primary);
+  background: transparent;
   overflow: hidden;
   transition: background 0.6s ease;
 }

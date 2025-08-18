@@ -6,19 +6,11 @@ const API_BASE = '/api'
 export default function App() {
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
-  const [theme, setTheme] = useState(() => {
-    return localStorage.getItem('rag-theme') || 'light'
-  })
   const [uploadToast, setUploadToast] = useState(null)
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
-    localStorage.setItem('rag-theme', theme)
-  }, [theme])
-
-  const toggleTheme = () => {
-    setTheme(prev => prev === 'light' ? 'dark' : 'light')
-  }
+    document.documentElement.setAttribute('data-theme', 'dark')
+  }, [])
 
   const handleSend = async (question) => {
     const userMessage = {
@@ -111,14 +103,6 @@ export default function App() {
             <span className="status-dot" />
             Online
           </div>
-          <button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            aria-label="Toggle theme"
-            title={theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'}
-          >
-            <span className="theme-toggle__knob" />
-          </button>
         </div>
       </header>
 
