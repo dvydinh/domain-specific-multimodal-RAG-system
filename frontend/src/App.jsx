@@ -98,7 +98,7 @@ export default function App() {
     <div className="app">
       <header className="header">
         <div className="header__brand">
-          <div className="header__logo" />
+          <img src="/strawberry.png" alt="Strawberry Logo" className="header__logo" />
           <div>
             <div className="header__title">Recipe RAG</div>
             <div className="header__subtitle">
