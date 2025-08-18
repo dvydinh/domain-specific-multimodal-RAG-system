@@ -56,6 +56,7 @@
   --blob-1: rgba(233, 30, 99, 0.04);
   --blob-2: rgba(244, 143, 177, 0.06);
   --blob-3: rgba(255, 214, 224, 0.08);
+  --seed-color: rgba(245, 195, 68, 0.25);
 }
 
 /* ============================================================
@@ -108,6 +109,7 @@
   --blob-1: rgba(255, 64, 129, 0.03);
   --blob-2: rgba(233, 30, 99, 0.04);
   --blob-3: rgba(194, 24, 91, 0.05);
+  --seed-color: rgba(255, 210, 80, 0.18);
 }
 
 /* ============================================================
@@ -179,47 +181,48 @@ body {
 }
 
 /* ============================================================
-   Floating Blobs — Ambient background decoration
+   Strawberry Seeds Background — Scattered yellow dots
    ============================================================ */
 
-body::before,
-body::after {
+body::before {
   content: '';
   position: fixed;
-  border-radius: 50%;
+  inset: 0;
   z-index: 0;
   pointer-events: none;
-  transition: background 1s ease;
+  background-image:
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2.5px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2.5px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2.5px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2.5px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2.5px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 3px, var(--seed-color) 100%, transparent 100%),
+    radial-gradient(circle 2px, var(--seed-color) 100%, transparent 100%);
+  background-position:
+    5% 8%, 12% 25%, 20% 55%, 28% 78%, 35% 15%,
+    42% 42%, 50% 70%, 58% 12%, 65% 38%, 72% 62%,
+    78% 88%, 85% 20%, 92% 50%, 8% 92%, 45% 95%,
+    70% 5%, 15% 68%, 88% 72%;
+  background-repeat: no-repeat;
+  background-size: 8px 10px;
+  animation: seeds-drift 20s ease-in-out infinite;
+  transition: opacity 0.6s ease;
 }
 
-body::before {
-  width: 500px;
-  height: 500px;
-  background: var(--blob-1);
-  top: -120px;
-  right: -100px;
-  animation: blob-float-1 12s ease-in-out infinite;
-}
-
-body::after {
-  width: 400px;
-  height: 400px;
-  background: var(--blob-2);
-  bottom: -80px;
-  left: -60px;
-  animation: blob-float-2 15s ease-in-out infinite;
-}
-
-@keyframes blob-float-1 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(-40px, 50px) scale(1.08); }
-  66% { transform: translate(30px, -30px) scale(0.95); }
-}
-
-@keyframes blob-float-2 {
-  0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(50px, -40px) scale(1.1); }
-  66% { transform: translate(-30px, 30px) scale(0.92); }
+@keyframes seeds-drift {
+  0%, 100% { transform: translateY(0); opacity: 1; }
+  50% { transform: translateY(-8px); opacity: 0.85; }
 }
 
 /* Scrollbar */
@@ -533,30 +536,33 @@ body::after {
 }
 
 .welcome__example {
-  padding: 10px var(--space-lg);
+  padding: 16px var(--space-xl);
   background: var(--bg-card);
   border: 1.5px solid var(--border-card);
   border-radius: var(--radius-full);
   color: var(--text-secondary);
   font-family: var(--font-family);
-  font-size: var(--font-size-sm);
-  font-weight: 600;
+  font-size: var(--font-size-base);
+  font-weight: 700;
   cursor: pointer;
   transition: all var(--transition-jelly);
   text-align: left;
   box-shadow: var(--shadow-card);
+  min-height: 54px;
+  display: flex;
+  align-items: center;
 }
 
 .welcome__example:hover {
   background: var(--bg-glass-hover);
   border-color: var(--border-glow);
   color: var(--text-primary);
-  transform: translateX(10px) scale(1.02);
+  transform: translateX(10px) scale(1.03);
   box-shadow: var(--shadow-md);
 }
 
 .welcome__example:active {
-  transform: translateX(10px) scale(0.98);
+  transform: translateX(10px) scale(0.97);
 }
 
 /* ============================================================
