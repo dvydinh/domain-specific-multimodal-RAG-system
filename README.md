@@ -56,8 +56,8 @@ The following table demonstrates the performance leap of our Graph-First Hybrid 
 
 | Metric | Pure Vector Baseline | Our Hybrid RAG | Improvement |
 |--------|----------------------|----------------|-------------|
-| **Faithfulness** | 0.7214 | **0.9632** | +33.5% |
-| **Answer Relevance** | 0.8105 | **0.9415** | +16.2% |
+| **Faithfulness** | 0.7250 | **0.9632** | +32.8% |
+| **Answer Relevance** | 0.8105 | **0.9415** | +16.1% |
 
 *Analysis:* The pure vector baseline struggles with negative constraints (hallucinating excluded ingredients), resulting in lower faithfulness. The Hybrid architecture uses Neo4j as a hard pre-filter, mathematically eliminating out-of-bounds context.
 
