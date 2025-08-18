@@ -61,6 +61,8 @@ The following table demonstrates the performance leap of our Graph-First Hybrid 
 
 *Analysis:* The pure vector baseline struggles with negative constraints (hallucinating excluded ingredients), resulting in lower faithfulness. The Hybrid architecture uses Neo4j as a hard pre-filter, mathematically eliminating out-of-bounds context.
 
+**Audit Trail & Reproducibility:** Detailed row-by-row evaluation logs (Questions, Generated Answers, Retrieved Contexts, and Individual Scores) are exported as CSV artifacts in the [`/benchmarks`](./benchmarks/) directory for full transparency and reproducibility.
+
 ---
 
 ## 3. Production-Ready Deployment
