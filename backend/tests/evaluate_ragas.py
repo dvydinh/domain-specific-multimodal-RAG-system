@@ -136,5 +136,36 @@ async def main():
     print(f"Baseline -> Faithfulness: {baseline_score.get('faithfulness', 0):.4f}, Answer Relevance: {baseline_score.get('answer_relevance', 0):.4f}")
     print(f"Hybrid   -> Faithfulness: {hybrid_score.get('faithfulness', 0):.4f}, Answer Relevance: {hybrid_score.get('answer_relevance', 0):.4f}")
 
+    # Generate Audit Trail (CSVs and JSON)
+    import pandas as pd
+    benchmarks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "benchmarks")
+    os.makedirs(benchmarks_dir, exist_ok=True)
+    
+    baseline_df = baseline_score.to_pandas()
+    hybrid_df = hybrid_score.to_pandas()
+    
+    baseline_df.to_csv(os.path.join(benchmarks_dir, "baseline_detailed_report.csv"), index=False)
+    hybrid_df.to_csv(os.path.join(benchmarks_dir, "hybrid_detailed_report.csv"), index=False)
+    
+    summary_data = {
+        "baseline": {
+            "faithfulness": baseline_score.get('faithfulness', 0),
+            "answer_relevance": baseline_score.get('answer_relevance', 0)
+        },
+        "hybrid": {
+            "faithfulness": hybrid_score.get('faithfulness', 0),
+            "answer_relevance": hybrid_score.get('answer_relevance', 0)
+        },
+        "improvements": {
+            "faithfulness_pct": ((hybrid_score.get('faithfulness', 0) / (baseline_score.get('faithfulness', 1) or 1)) - 1) * 100,
+            "answer_relevance_pct": ((hybrid_score.get('answer_relevance', 0) / (baseline_score.get('answer_relevance', 1) or 1)) - 1) * 100
+        }
+    }
+    
+    with open(os.path.join(benchmarks_dir, "summary.json"), "w") as f:
+        json.dump(summary_data, f, indent=4)
+        
+    print(f"\nAudit Trail: CSV and JSON summary saved to {benchmarks_dir}/")
+
 if __name__ == "__main__":
     asyncio.run(main())

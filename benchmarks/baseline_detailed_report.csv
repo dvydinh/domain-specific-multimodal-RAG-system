@@ -1,0 +1,2 @@
+question,ground_truth,answer,contexts,faithfulness,answer_relevance
+"How do I make Spicy Ramen?","Boil noodles. Add spicy broth.","You can make spicy ramen by boiling noodles and adding a spicy broth sauce.",["Boil the ramen noodles.","Mix the spicy sauce into the broth."],0.7250,0.8105
