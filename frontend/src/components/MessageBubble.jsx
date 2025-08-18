@@ -59,7 +59,11 @@ export default function MessageBubble({ message }) {
     <>
       <div className={`message message--${message.role}`}>
         <div className="message__avatar">
-          {isUser ? 'U' : 'R'}
+          {isUser ? (
+            <img src="/cherry.png" alt="User" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+          ) : (
+            <img src="/strawberry.png" alt="AI" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+          )}
         </div>
         <div>
           <div className="message__content">
