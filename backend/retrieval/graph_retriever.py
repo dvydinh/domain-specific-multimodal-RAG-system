@@ -166,7 +166,14 @@ class GraphRetriever:
         Simple fallback: search recipe names when Cypher generation fails.
         Includes a try-catch to prevent FastAPI crashes if Neo4j is completely down.
         """
-        search_term = query.lower()
+        # Basic stopword removal for fallback keyword search
+        stopwords = {"how", "to", "make", "a", "the", "recipe", "recipes", "for", "with", "without", "and", "or"}
+        keywords = [w for w in query.lower().split() if w not in stopwords and len(w) > 2]
+        
+        # If no valid keywords, return empty or fallback to a broad search
+        if not keywords:
+            return []
+            
         def _run():
             try:
                 with self._driver.session() as session:
@@ -174,15 +181,15 @@ class GraphRetriever:
                         res = tx.run(
                             """
                             MATCH (r:Recipe)
-                            WHERE toLower(r.name) CONTAINS $term
+                            WHERE any(word IN $keywords WHERE toLower(r.name) CONTAINS word)
                                OR EXISTS {
                                    MATCH (r)-[:HAS_TAG]->(t:Tag)
-                                   WHERE toLower(t.name) CONTAINS $term
+                                   WHERE any(word IN $keywords WHERE toLower(t.name) CONTAINS word)
                                }
                             RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
                             LIMIT 20
                             """,
-                            term=search_term,
+                            keywords=keywords,
                         )
                         return res.data()
                     return session.execute_read(_do_fallback)
