@@ -19,15 +19,15 @@ Pure semantic search relies heavily on dense vector distance, which fails dramat
 |----------|-----------------|----------------|
 | **Negative Constraints** | Fails: Searching for "recipes *without* pork" yields high cosine similarity to text containing "pork". | **Succeeds:** Cypher `WHERE NOT` completely drops pork variant IDs before vector search. |
 | **Combined Intersections** | Unreliable: "Japanese AND Spicy AND Vegan" retrieves average similarity matches missing 1 or 2 constraints. | **Succeeds:** Graph mathematically guarantees `HAS_TAG` matches for all 3 nodes. |
-| **Hallucination Rate** | Elevated: Synthesizer LLM attempts to answer from disjointed chunks. | **Minimized:** Vector hits represent 100% mathematically valid scopes. |
+| **Hallucination Defense** | Elevated: Synthesizer LLM attempts to answer from disjointed chunks or its own weights. | **Zero-Hallucination:** Guardrails enforce strict rejection when graph filters yield zero intersections. |
 
-**Solution:** The routing LLM outputs a structured constraint JSON mapping directly to a Cypher query. The **Knowledge Graph (Neo4j)** functions as an absolute "Hard Filter," returning an exact set of valid Recipe IDs. **Qdrant** subsequently scopes its vector retrieval entirely within these IDs, yielding a 0% false positive rate for strict logic conditions.
+**Solution:** The routing LLM outputs a structured constraint JSON mapping directly to a case-insensitive Cypher query using strictly enforced graph relationships (e.g., `CONTAINS_INGREDIENT`). The **Knowledge Graph (Neo4j)** functions as an absolute "Hard Filter," returning an exact set of valid Recipe IDs. **Qdrant** subsequently scopes its vector retrieval entirely within these IDs, yielding a 0% false positive rate for strict logic conditions.
 
 ---
 
-## 2. Architecture & Benchmarks
+## 2. Architecture & Pipelines
 
-The system pipelines data through five distinct execution layers before resolving the user answer dynamically.
+The system pipelines data through distinct robust execution layers before resolving the user answer dynamically.
 
 ```mermaid
 flowchart TD
@@ -40,32 +40,32 @@ flowchart TD
 
 ### System Configuration
 
-The backend is engineered with strictly quantified parameters configured in the extraction pipeline:
+The backend is engineered with quantified parameters configured in the extraction pipeline, strictly rate-limited for stability:
 
-- **Routing & Synthesis LLM:** `GPT-4o-mini`
-- **Text Embedding Model:** `BAAI/bge-m3` (1024-dim, dense vector encoding)
-- **Image/Cross-Modal Embedding:** `CLIP ViT-B/32` (512-dim vector mapping)
+- **Routing & Synthesis LLM:** `Gemini 3.1 Flash` (Configured with automated retry logic, comprehensive timeouts, and 15 RPM cooldown throttling).
+- **Text Embedding Model:** `BAAI/bge-m3` (1024-dim, dense vector encoding, local execution).
+- **Image/Cross-Modal Embedding:** `CLIP ViT-B/32` (512-dim vector mapping).
 - **Vector Index Engine:** Qdrant HNSW (`m=16`, `ef_construct=100`) with `on_disk_payload=True` enabled to bypass RAM saturation constraints.
 
 ---
 
 ## 3. Quantitative Benchmarks & Evaluation (A/B Testing)
-We evaluate our system using the Ragas framework. To ensure $0 MLOps operational cost, evaluations are powered by **Gemini 1.5 Flash** (Judge) and **Local BGE-M3** (Embeddings). 
+We evaluate our system using the Ragas framework. To ensure $0 MLOps operational cost, evaluations are powered by **Gemini Models** (Judge) and **Local BGE-M3** (Embeddings) alongside explicit monkey patching to resolve framework temperature constraints.
 
-The following table demonstrates the performance leap of our Graph-First Hybrid approach compared to a Pure Vector Search baseline:
+To robustly test anti-hallucination measures, the pipeline validates against comprehensive adversarial sets containing both verifiable criteria and intentionally absent criteria (e.g., querying for removed recipes or unmentioned ingredients). 
 
-| Metric | Pure Vector Baseline | Our Hybrid RAG | Improvement |
-|--------|----------------------|----------------|-------------|
-| **Faithfulness** | 0.7250 | **0.9632** | +32.8% |
-| **Answer Relevance** | 0.8105 | **0.9415** | +16.1% |
+| Metric | Pure Vector Baseline | Our Hybrid RAG |
+|--------|----------------------|----------------|
+| **Faithfulness** | 0.7250 | **> 0.9500** |
+| **Answer Relevance** | 0.8105 | **> 0.9000** |
 
-*Analysis:* The pure vector baseline struggles with negative constraints (hallucinating excluded ingredients), resulting in lower faithfulness. The Hybrid architecture uses Neo4j as a hard pre-filter, mathematically eliminating out-of-bounds context.
+*Analysis:* The pure vector baseline struggles with negative constraints (hallucinating excluded ingredients like nutmeg), resulting in drastically lower faithfulness. The Hybrid architecture uses Neo4j as a hard pre-filter, mathematically eliminating out-of-bounds context. When documents are absent, the Synthesizer guardrail strictly enforces: *"Based on the provided documents, I cannot find this information."*
 
-**Audit Trail & Reproducibility:** Detailed row-by-row evaluation logs (Questions, Generated Answers, Retrieved Contexts, and Individual Scores) are exported as CSV artifacts in the [`/benchmarks`](./benchmarks/) directory for full transparency and reproducibility.
+**Audit Trail & Reproducibility:** Detailed row-by-row evaluation logs (Questions, Generated Answers, Retrieved Contexts, and Individual Scores) are cleanly exported as CSV artifacts in the unified [`/benchmarks`](./benchmarks/) directory for full transparency.
 
 ---
 
-## 3. Production-Ready Deployment
+## 4. Production-Ready Deployment
 
 The application is containerized utilizing multi-stage Docker builds. The `api` and `web` containers are orchestrated alongside native `neo4j` and `qdrant` environments via a unified production compose file. 
 
@@ -73,6 +73,16 @@ The application is containerized utilizing multi-stage Docker builds. The `api` 
 
 ```bash
 docker-compose -f docker-compose.prod.yml up -d --build
+```
+
+### Manual Benchmark Verification
+To manually orchestrate the testing pipeline in isolated CLI environments:
+```bash
+# 1. Clean environment (Wipe Neo4j and Qdrant)
+python tmp_clean_db.py
+
+# 2. Run the automated ETL & evaluate sequence natively
+python run_all.py
 ```
 
 ### Hardware Requirements
@@ -84,7 +94,7 @@ Running the architecture at scale with `on_disk_payload` offloads string seriali
 
 ---
 
-## 4. API Reference
+## 5. API Reference
 
 The backend communicates via standard REST HTTP. Below is an example payload representing a graph-centric constraint query yielding multimodal citations.
 
@@ -119,14 +129,14 @@ curl -X POST http://localhost:8000/api/query \
 
 ---
 
-## 5. Future Work (v2.0 Path)
+## 6. Future Work (v2.0 Path)
 
 To address potential latency and information fidelity loss derived from parsing discrete `text/image` modalities:
-*   **Native Multimodal Embeddings:** Migrate from the current Two-Tower baseline (`BGE-M3` + `CLIP`) toward a unified representation model (utilizing `ColPali` or `Gemini 1.5 Flash`). This eliminates bridging abstractions and natively projects distinct datatypes uniformly into the same semantic vector space, heavily decoupling pipeline overhead.
+*   **Native Multimodal Embeddings:** Migrate from the current Two-Tower baseline (`BGE-M3` + `CLIP`) toward a unified representation model (utilizing `ColPali` or upcoming multimodal models). This eliminates bridging abstractions and natively projects distinct datatypes uniformly into the same semantic vector space, heavily decoupling pipeline overhead.
 
 ---
 
-## 6. Literature & References
+## 7. Literature & References
 
 The architectural decisions in this repository are grounded in the following research:
 
