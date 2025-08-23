@@ -10,7 +10,7 @@ import logging
 from typing import Optional
 
 import asyncio
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from neo4j import GraphDatabase, Driver
 
@@ -85,11 +85,11 @@ class GraphRetriever:
         neo4j_password: Optional[str] = None,
     ):
         settings = get_settings()
-        self.llm = ChatOpenAI(
-            api_key=api_key or settings.openai_api_key,
-            model=settings.openai_model,
+        self.llm = ChatGoogleGenerativeAI(
+            api_key=api_key or settings.google_api_key,
+            model=settings.google_model,
             temperature=0.0,
-            max_tokens=500,
+            max_output_tokens=500,
         )
         self._driver: Driver = GraphDatabase.driver(
             neo4j_uri or settings.neo4j_uri,
@@ -133,14 +133,25 @@ class GraphRetriever:
             return await self._fallback_search(query)
 
     async def _generate_cypher(self, query: str) -> str:
-        """Generate a Cypher query from natural language using LLM asynchronously."""
+        """Generate a Cypher query from natural language using LLM asynchronously.
+
+        Args:
+            query: Natural language query to translate.
+
+        Returns:
+            Generated Cypher query string, or empty string on failure.
+        """
         messages = [
             SystemMessage(content=CYPHER_GENERATION_PROMPT),
             HumanMessage(content=f"Generate a Cypher query for: {query}"),
         ]
 
-        response = await self.llm.ainvoke(messages)
-        cypher = response.content.strip()
+        try:
+            response = await self.llm.ainvoke(messages)
+            cypher = response.content.strip()
+        except Exception as e:
+            logger.error(f"Cypher generation LLM call failed: {e}")
+            return ""
 
         # Clean up common LLM formatting artifacts
         if cypher.startswith("```"):

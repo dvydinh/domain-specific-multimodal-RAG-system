@@ -196,29 +196,6 @@ class IngestionPipeline:
         """Convert extracted pages into text chunks, preserving blocks for bbox."""
         return self.chunker.chunk_pages(pages, source_pdf=pdf_name)
 
-    def _assign_recipe_names(
-        self,
-        chunks: list[ChunkMetadata],
-        entities: list,
-    ):
-        """
-        Stateful assignment of recipe names to text chunks.
-        When a chunk mentions a recipe name, all subsequent chunks 
-        are assigned to that recipe until a new recipe is encountered.
-        This preserves data lineage for RAG without orphaned chunks.
-        """
-        current_recipe = None
-        for chunk in chunks:
-            # Check if any recipe is explicitly mentioned in this chunk
-            for entity in entities:
-                if entity.recipe_name.lower() in chunk.text.lower():
-                    current_recipe = entity.recipe_name
-                    break
-                    
-            # Assign the current active recipe
-            if current_recipe:
-                chunk.recipe_name = current_recipe
-
     def _collect_image_metadata(
         self,
         pages: list[PageContent],
@@ -275,7 +252,7 @@ def main():
         elif Path(target).is_dir():
             pipeline.ingest_directory(target)
         else:
-            print(f"Error: {target} is not a valid file or directory")
+            logger.error(f"Invalid target: {target} is not a valid file or directory")
             sys.exit(1)
     else:
         pipeline.ingest_directory(settings.pdf_input_dir)

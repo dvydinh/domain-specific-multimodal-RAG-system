@@ -14,7 +14,7 @@ import logging
 from enum import Enum
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import get_settings
@@ -64,11 +64,11 @@ class QueryRouter:
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         settings = get_settings()
-        self.llm = ChatOpenAI(
-            api_key=api_key or settings.openai_api_key,
-            model=model or settings.openai_model,
+        self.llm = ChatGoogleGenerativeAI(
+            api_key=api_key or settings.google_api_key,
+            model=model or settings.google_model,
             temperature=0.0,
-            max_tokens=20,
+            max_output_tokens=20,
         )
 
     async def aroute(self, query: str) -> QueryType:

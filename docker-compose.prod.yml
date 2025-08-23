@@ -5,18 +5,17 @@ services:
     image: neo4j:5.20-community
     container_name: rag-neo4j-prod
     ports:
-      - "7474:7474"   # Browser UI
-      - "7687:7687"   # Bolt protocol
+      - "7474:7474" # Browser UI
+      - "7687:7687" # Bolt protocol
     environment:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-ragpassword}
       NEO4J_PLUGINS: '["apoc"]'
-      NEO4J_db_tx__timeout: "60s"
     volumes:
       - neo4j_data_prod:/data
       - neo4j_logs_prod:/logs
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1"]
+      test: [ "CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:7474 || exit 1" ]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -25,12 +24,12 @@ services:
     image: qdrant/qdrant:v1.10.1
     container_name: rag-qdrant-prod
     ports:
-      - "6333:6333"   # REST API
+      - "6333:6333" # REST API
     volumes:
       - qdrant_storage_prod:/qdrant/storage
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1"]
+      test: [ "CMD-SHELL", "curl -f http://localhost:6333/healthz || exit 1" ]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -49,8 +48,8 @@ services:
       - "8000:8000"
     environment:
       # Inject critical env variables from the host's `.env` file automatically
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-2.0-flash}
       - TEXT_EMBEDDING_MODEL=${TEXT_EMBEDDING_MODEL:-BAAI/bge-m3}
       - CLIP_MODEL=${CLIP_MODEL:-ViT-B-32}
       # Re-route connections internally to docker networks

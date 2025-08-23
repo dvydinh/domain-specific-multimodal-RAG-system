@@ -7,9 +7,8 @@ pydantic-settings==2.3.4
 
 # === Large Language Models & Orchestration ===
 langchain==0.2.11
-langchain-openai==0.1.19
 langchain-community==0.2.10
-langchain-core==0.2.23
+langchain-core==0.2.24
 langchain-text-splitters==0.2.2
 
 # === Vector & Graph Databases ===
