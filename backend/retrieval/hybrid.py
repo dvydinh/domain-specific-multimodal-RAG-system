@@ -1,14 +1,13 @@
 """
 Hybrid retrieval orchestrator.
 
-Implements the three-step retrieval flow:
-  1. Route query → determine strategy
-  2. Graph retrieval → filter by hard constraints → get recipe IDs
-  3. Vector retrieval → semantic search within filtered scope
+Architecture:
+  1. Router + Graph run concurrently (hide latency)
+  2. Graph acts as a HARD FILTER → produces valid recipe_ids
+  3. Vector searches ONLY within filtered scope (Qdrant Payload Filter)
+  4. Ranking is 100% Cosine Similarity — no RRF, no fusion scores
 
-This is the core intelligence of the system — it combines the logical
-precision of the knowledge graph with the semantic understanding of
-vector search to eliminate hallucination while maintaining rich results.
+The Graph constrains the search space; the Vector ranks within it.
 """
 
 import asyncio
@@ -24,12 +23,7 @@ logger = logging.getLogger(__name__)
 
 class HybridRetriever:
     """
-    Orchestrates hybrid retrieval across graph and vector stores.
-
-    The key insight: Graph retrieval produces a set of recipe IDs that
-    satisfy ALL hard constraints (ingredients, tags, exclusions).
-    Vector retrieval then searches ONLY within this pre-filtered set,
-    making hallucination impossible for constraint-based queries.
+    Orchestrates hybrid retrieval: Graph Hard Filter + Vector Cosine Ranking.
     """
 
     def __init__(
@@ -49,22 +43,21 @@ class HybridRetriever:
         include_images: bool = True,
     ) -> dict:
         """
-        Execute the full hybrid retrieval pipeline asynchronously.
-        Runs Router and Graph Retriever concurrently to minimize latency.
-        The ranking strategy relies 100% on Vector Cosine Similarity mapped
-        within the hard boundaries of the Graph Retriever's output IDs.
+        Execute full hybrid retrieval pipeline.
+
+        Concurrency strategy:
+          - Router and Graph fire simultaneously
+          - Graph must finish before Vector (sequential dependency)
+          - Vector text and image searches run concurrently via aretrieve_all
         """
-        logger.info(f"Starting async hybrid retrieval for: '{query}'")
+        # --- Concurrent: Router + Graph ---
+        routing, graph_results = await asyncio.gather(
+            self.router.aroute_with_analysis(query),
+            self.graph_retriever.aretrieve(query),
+        )
 
-        # === Step 1 & 2: Route and Graph Retrieval (Concurrent) ===
-        # Run them concurrently to hide graph latency during routing analysis.
-        router_task = asyncio.create_task(self.router.aroute_with_analysis(query))
-        graph_task = asyncio.create_task(self.graph_retriever.aretrieve(query))
-
-        # Wait for router first
-        routing = await router_task
         query_type = QueryType(routing["query_type"])
-        logger.info(f"Query type: {query_type.value} | Features: {routing['features']}")
+        logger.info(f"[Hybrid] type={query_type.value} | query='{query[:80]}'")
 
         result = {
             "query_type": query_type.value,
@@ -74,70 +67,48 @@ class HybridRetriever:
             "recipe_ids": [],
         }
 
-        recipe_ids = None
+        # --- Resolve Graph Hard Filter ---
+        recipe_ids: Optional[list[str]] = None
 
         if query_type in (QueryType.GRAPH_ONLY, QueryType.HYBRID):
-            # Graph strictly functions as a HARD FILTER mapping to valid `recipe_ids`
-            graph_results = await graph_task
             result["graph_results"] = graph_results
-            recipe_ids = [r.get("id") for r in graph_results if r.get("id")]
+            recipe_ids = [r["id"] for r in graph_results if r.get("id")]
             result["recipe_ids"] = recipe_ids
-
-            logger.info(f"  → Graph Hard Filter yielded {len(recipe_ids)} matching valid recipes")
+            logger.info(f"  Graph filter → {len(recipe_ids)} valid IDs")
 
             if not recipe_ids:
-                logger.warning("Graph Hard Filter returned no results, falling back to Vector-only")
+                logger.warning("  Graph returned ∅ → fallback to VECTOR_ONLY")
                 query_type = QueryType.VECTOR_ONLY
                 recipe_ids = None
-        else:
-            # We don't need graph results. Cancel it to free resources.
-            graph_task.cancel()
 
-        # === Step 3: Vector retrieval ===
+        # --- Vector Retrieval (cosine-ranked within filtered scope) ---
         if query_type in (QueryType.VECTOR_ONLY, QueryType.HYBRID):
-            logger.info("[Step 3] Executing vector retrieval...")
-            
-            # Pure semantics: Payload map strictly boundaries the Qdrant Cosine Similarity search.
-            # No fetch multiplier or fusion scores required, we fetch exactly `top_k`.
             vector_results = await self.vector_retriever.aretrieve_all(
                 query=query,
                 top_k_text=top_k,
                 top_k_images=3 if include_images else 0,
-                recipe_ids=recipe_ids,  # Must Filter condition in Qdrant Vector DB
+                recipe_ids=recipe_ids,
                 include_images=include_images,
             )
-            
             result["text_results"] = vector_results["text_results"]
             result["image_results"] = vector_results["image_results"]
 
-            if query_type == QueryType.HYBRID and result["graph_results"]:
-                logger.info("  → Semantic results returned 100% via Cosine Similarity within Payload boundaries.")
-
-            logger.info(
-                f"  → Vector Cosine Search returned {len(result['text_results'])} text, "
-                f"{len(result['image_results'])} image results"
-            )
-
         elif query_type == QueryType.GRAPH_ONLY:
-            # For graph-only queries, enrich with recipe details concurrently
-            logger.info("[Step 3] Graph-only mode, enriching with recipe details...")
-            enrichment_tasks = [
-                self.graph_retriever.a_get_recipe_details(recipe["id"])
-                for recipe in result["graph_results"] if recipe.get("id")
+            # Enrich graph-only results with full recipe details concurrently
+            tasks = [
+                self.graph_retriever.a_get_recipe_details(r["id"])
+                for r in result["graph_results"] if r.get("id")
             ]
-            if enrichment_tasks:
-                details_list = await asyncio.gather(*enrichment_tasks)
-                for recipe, details in zip(result["graph_results"], details_list):
-                    recipe.update(details)
+            if tasks:
+                details = await asyncio.gather(*tasks)
+                for recipe, detail in zip(result["graph_results"], details):
+                    recipe.update(detail)
 
         logger.info(
-            f"Hybrid retrieval complete: "
-            f"type={result['query_type']}, "
-            f"graph={len(result['graph_results'])}, "
+            f"  Done: graph={len(result['graph_results'])}, "
             f"text={len(result['text_results'])}, "
             f"images={len(result['image_results'])}"
         )
-
         return result
 
     def close(self):

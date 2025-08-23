@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     settings = get_settings()
-    logger.info(f"OpenAI model: {settings.openai_model}")
+    logger.info(f"LLM model: {settings.google_model}")
     logger.info(f"Neo4j: {settings.neo4j_uri}")
     logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
 

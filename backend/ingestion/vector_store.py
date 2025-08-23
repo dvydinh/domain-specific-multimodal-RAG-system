@@ -115,7 +115,7 @@ class VectorStoreManager:
             self._text_model = SentenceTransformer(settings.text_embedding_model)
         return self._text_model
 
-    def _get_clip_model(self):
+    def _get_clip_model(self) -> tuple:
         """Lazily load the CLIP model for image embeddings."""
         if self._clip_model is None:
             import open_clip

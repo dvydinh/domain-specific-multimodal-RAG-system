@@ -9,9 +9,10 @@ Endpoints:
 """
 
 import logging
+import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
 from fastapi.responses import FileResponse
 
 from backend.config import get_settings
@@ -180,9 +181,7 @@ def _check_qdrant() -> str:
 # Document Upload
 # ================================================================
 
-from fastapi import UploadFile, File, BackgroundTasks
 from backend.ingestion.pipeline import IngestionPipeline
-import shutil
 
 def _run_ingestion(file_path: str):
     """Background task: run the full ingestion pipeline on the uploaded PDF."""

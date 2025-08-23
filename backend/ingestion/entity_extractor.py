@@ -1,15 +1,17 @@
 """
-LLM-based entity extraction using OpenAI function calling.
+LLM-based entity extraction using Google Gemini structured output.
 
 Scans text chunks and extracts structured recipe data:
 recipe names, ingredients, tags, and cuisine type.
+
+Rate-limited to respect Google AI free tier (15 RPM).
 """
 
-import json
 import logging
+import time
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -92,20 +94,31 @@ Rules:
 
 class EntityExtractor:
     """
-    Extracts recipe entities from text using LLM function calling.
+    Extracts recipe entities from text using Google Gemini structured output.
 
-    Uses GPT-4o-mini with structured output to ensure consistent
-    JSON schema compliance.
+    Rate-limited via configurable cooldown to stay within Google AI free tier
+    (15 RPM). Uses tenacity retry for transient API failures.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+        """Initialize the entity extractor with Gemini LLM.
+
+        Args:
+            api_key: Google API key. Falls back to settings if not provided.
+            model: Gemini model name. Falls back to settings if not provided.
+        """
         settings = get_settings()
-        self.llm = ChatOpenAI(
-            api_key=api_key or settings.openai_api_key,
-            model=model or settings.openai_model,
-            temperature=0.0,  # Deterministic extraction
-            max_tokens=2000,
-        )
+
+        self.llm = ChatGoogleGenerativeAI(
+            api_key=api_key or settings.google_api_key,
+            model=model or settings.google_model,
+            temperature=0.0,
+            max_output_tokens=2000,
+            max_retries=2
+        ).with_structured_output(EXTRACTION_FUNCTION)
+
+        self._cooldown = settings.api_cooldown_seconds
+        self._batch_size = settings.entity_batch_size
 
     @retry(
         stop=stop_after_attempt(3),
@@ -129,31 +142,25 @@ class EntityExtractor:
             HumanMessage(content=f"Extract recipe entities from this text:\n\n{text}"),
         ]
 
-        response = self.llm.invoke(
-            messages,
-            functions=[EXTRACTION_FUNCTION],
-            function_call={"name": "extract_recipe_entities"},
-        )
+        response = self.llm.invoke(messages)
 
-        # Parse the function call response
-        if not response.additional_kwargs.get("function_call"):
-            logger.warning("LLM did not return a function call response")
+        if not response:
+            logger.warning("LLM did not return a response")
             return []
 
-        try:
-            result = json.loads(
-                response.additional_kwargs["function_call"]["arguments"]
-            )
-        except (json.JSONDecodeError, KeyError) as e:
-            logger.error(f"Failed to parse LLM response: {e}")
-            return []
-
-        entities = self._parse_result(result)
+        entities = self._parse_result(response)
         logger.info(f"Extracted {len(entities)} recipe entities from text chunk")
         return entities
 
     def _parse_result(self, result: dict) -> list[ExtractedEntity]:
-        """Convert raw LLM JSON output to validated Pydantic models."""
+        """Convert raw LLM JSON output to validated Pydantic models.
+
+        Args:
+            result: Parsed JSON dict from the structured output LLM.
+
+        Returns:
+            List of validated ExtractedEntity models.
+        """
         entities: list[ExtractedEntity] = []
 
         for recipe_data in result.get("recipes", []):
@@ -187,21 +194,29 @@ class EntityExtractor:
 
         return entities
 
-    def extract_batch(
-        self, texts: list[str], batch_size: int = 5
-    ) -> list[ExtractedEntity]:
+    def extract_batch(self, texts: list[str]) -> list[ExtractedEntity]:
         """
-        Extract entities from multiple text chunks.
+        Extract entities from multiple text chunks with rate limiting.
 
-        Processes in batches to respect API rate limits.
-        Deduplicates recipes by name.
+        Processes sequentially with a configurable cooldown between API calls
+        to respect Google AI free tier (15 RPM). Deduplicates recipes by name.
+
+        Args:
+            texts: List of text chunks to extract entities from.
+
+        Returns:
+            Deduplicated list of ExtractedEntity objects.
         """
         all_entities: list[ExtractedEntity] = []
         seen_names: set[str] = set()
+        total_batches = (len(texts) + self._batch_size - 1) // self._batch_size
 
-        for i in range(0, len(texts), batch_size):
-            batch = texts[i:i + batch_size]
+        for i in range(0, len(texts), self._batch_size):
+            batch_num = i // self._batch_size + 1
+            batch = texts[i:i + self._batch_size]
             combined = "\n\n---\n\n".join(batch)
+
+            logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} chunks)...")
 
             try:
                 entities = self.extract(combined)
@@ -211,7 +226,12 @@ class EntityExtractor:
                         seen_names.add(normalized)
                         all_entities.append(entity)
             except Exception as e:
-                logger.error(f"Batch extraction failed for batch {i}: {e}")
+                logger.error(f"Batch extraction failed for batch {batch_num}: {e}")
+
+            # Rate limit: sleep between API calls to stay under 15 RPM
+            if i + self._batch_size < len(texts):
+                logger.info(f"Rate limit cooldown: sleeping {self._cooldown}s...")
+                time.sleep(self._cooldown)
 
         logger.info(f"Total unique entities extracted: {len(all_entities)}")
         return all_entities

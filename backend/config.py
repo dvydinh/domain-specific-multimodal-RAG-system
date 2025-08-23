@@ -15,12 +15,16 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
-    # --- OpenAI ---
+    # --- Google AI API ---
+    google_api_key: str = Field(default="")
+    google_model: str = Field(default="gemini-2.0-flash")
+
+    # --- OpenAI (RAGAS Evaluator) ---
     openai_api_key: str = Field(default="")
-    openai_model: str = Field(default="gpt-4o-mini")
-    openai_embedding_model: str = Field(default="text-embedding-3-small")
+    openai_model: str = Field(default="gpt-3.5-turbo")
 
     # --- Neo4j ---
     neo4j_uri: str = Field(default="bolt://localhost:7687")
@@ -44,6 +48,13 @@ class Settings(BaseSettings):
     pdf_input_dir: str = Field(default="data/raw")
     image_output_dir: str = Field(default="data/images")
 
+    # --- Rate Limiting (Google AI Free Tier: 15 RPM) ---
+    api_cooldown_seconds: int = Field(default=5)
+    entity_batch_size: int = Field(default=2)
+
+    # --- Evaluation ---
+    eval_test_size: int = Field(default=50)
+
     # --- API ---
     api_host: str = Field(default="0.0.0.0")
     api_port: int = Field(default=8000)
@@ -51,6 +62,7 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
+        """Parse comma-separated CORS origins into a list."""
         return [origin.strip() for origin in self.cors_origins.split(",")]
 
 

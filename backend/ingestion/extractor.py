@@ -10,6 +10,7 @@ import os
 import logging
 from pathlib import Path
 from dataclasses import dataclass, field
+from typing import Generator
 
 import fitz  # PyMuPDF
 
@@ -47,7 +48,7 @@ class PDFExtractor:
         self.image_output_dir = Path(image_output_dir)
         self.image_output_dir.mkdir(parents=True, exist_ok=True)
 
-    def extract(self, pdf_path: str): # Generator yielding PageContent
+    def extract(self, pdf_path: str) -> Generator["PageContent", None, None]:
         """
         Extract all text and images from a PDF file.
 

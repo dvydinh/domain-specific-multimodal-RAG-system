@@ -9,7 +9,7 @@ with inline citations [1], [2], etc.
 import logging
 from typing import Optional
 
-from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import get_settings
@@ -46,11 +46,11 @@ class ResponseSynthesizer:
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         settings = get_settings()
-        self.llm = ChatOpenAI(
-            api_key=api_key or settings.openai_api_key,
-            model=model or settings.openai_model,
+        self.llm = ChatGoogleGenerativeAI(
+            api_key=api_key or settings.google_api_key,
+            model=model or settings.google_model,
             temperature=0.3,
-            max_tokens=2000,
+            max_output_tokens=2000,
         )
 
     async def asynthesize(self, query: str, retrieval_results: dict) -> QueryResponse:
