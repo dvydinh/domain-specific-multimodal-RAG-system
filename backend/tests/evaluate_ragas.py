@@ -89,10 +89,10 @@ async def _evaluate_pipeline(
     g_list: list[str] = []
 
     for i, item in enumerate(questions):
-        # Rate Limit Defense: Force the system to sleep 30s between questions to avoid 429
+        # Defensive Rate Limiting: 60s sleep between questions to respect 15 RPM limits
         if i > 0:
-            logger.info(f"  [{label}] Rate Limit Defense: Sleeping for 30s...")
-            await asyncio.sleep(30)
+            logger.info(f"  [{label}] Rate Limit Defense: Sleeping for 60s...")
+            await asyncio.sleep(60)
 
         query = item["question"]
         logger.info(f"  [{label}] Processing question {i + 1}/{len(questions)}")
@@ -184,9 +184,9 @@ async def main() -> None:
         ragas_llm = gemini_llm
         ragas_emb = bge_embeddings
 
-    # RATE LIMITER CONFIG
+    # RATE LIMITER CONFIG: Optimized for Google AI Free Tier (15 RPM)
     from ragas.run_config import RunConfig
-    eval_config = RunConfig(timeout=75, max_retries=10, max_wait=75, max_workers=1)
+    eval_config = RunConfig(timeout=120, max_retries=10, max_wait=120, max_workers=1)
 
     # 1. LOAD MANUAL DATASET
     eval_questions = load_manual_dataset()

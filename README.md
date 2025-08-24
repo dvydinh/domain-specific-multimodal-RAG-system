@@ -56,12 +56,12 @@ To robustly test anti-hallucination measures, the pipeline validates against com
 
 | Metric | Pure Vector Baseline | Our Hybrid RAG |
 |--------|----------------------|----------------|
-| **Faithfulness** | 0.7250 | **> 0.9500** |
-| **Answer Relevance** | 0.8105 | **> 0.9000** |
+| **Faithfulness** | [Pending Analysis] | [Pending Analysis] |
+| **Answer Relevance** | [Pending Analysis] | [Pending Analysis] |
 
-*Analysis:* The pure vector baseline struggles with negative constraints (hallucinating excluded ingredients like nutmeg), resulting in drastically lower faithfulness. The Hybrid architecture uses Neo4j as a hard pre-filter, mathematically eliminating out-of-bounds context. When documents are absent, the Synthesizer guardrail strictly enforces: *"Based on the provided documents, I cannot find this information."*
+*Analysis:* The comparison metrics between pure vector baseline and our Hybrid architecture are currently being generated via the automated Ragas evaluation pipeline. Preliminary tests show that the Hybrid approach mathematically eliminates out-of-bounds context by using Neo4j as a hard pre-filter. When documents are absent, the Synthesizer guardrail strictly enforces: *"Based on the provided documents, I cannot find this information."*
 
-**Audit Trail & Reproducibility:** Detailed row-by-row evaluation logs (Questions, Generated Answers, Retrieved Contexts, and Individual Scores) are cleanly exported as CSV artifacts in the unified [`/benchmarks`](./benchmarks/) directory for full transparency.
+**Evaluation Methodology:** Detailed row-by-row logs (Questions, Generated Answers, Retrieved Contexts, and Individual Scores) are exported as CSV artifacts in the unified [`/benchmarks`](./benchmarks/) directory for full transparency.
 
 ---
 
