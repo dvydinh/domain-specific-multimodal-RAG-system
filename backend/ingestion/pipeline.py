@@ -8,6 +8,7 @@ This is the main entry point for processing new recipe PDFs.
 """
 
 import logging
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -126,7 +127,8 @@ class IngestionPipeline:
             # Assign recipe names to chunks for cross-referencing continuously
             for chunk in page_chunks:
                 for entity in entities:
-                    if entity.recipe_name.lower() in chunk.text.lower():
+                    # Robust word boundary check to prevent partial word false positives
+                    if re.search(rf"\b{re.escape(entity.recipe_name.lower())}\b", chunk.text.lower()):
                         current_recipe = entity.recipe_name
                         break
                 if current_recipe:

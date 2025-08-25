@@ -15,6 +15,10 @@ import glob
 import logging
 import os
 import sys
+import nest_asyncio
+
+# Apply nest_asyncio explicitly to prevent RAGAS internal event loop conflicts
+nest_asyncio.apply()
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -225,7 +229,7 @@ def _save_benchmark_report(
 # Main Entry Point
 # ================================================================
 
-async def main() -> None:
+def main() -> None:
     """Run the full A/B comparative evaluation: Pure Vector vs Hybrid RAG."""
     logging.basicConfig(
         level=logging.INFO,
@@ -285,8 +289,9 @@ async def main() -> None:
 
     # --- [1] Evaluate Pure Vector Baseline ---
     logger.info("[1] Evaluating Pure Vector Baseline...")
-    baseline_data = await _evaluate_pipeline(
-        eval_questions, VectorRetriever(), label="Baseline"
+    # Run the retrieval loop inside a managed async context
+    baseline_data = asyncio.run(
+        _evaluate_pipeline(eval_questions, VectorRetriever(), label="Baseline")
     )
     baseline_dataset = Dataset.from_dict(baseline_data)
 
@@ -299,8 +304,9 @@ async def main() -> None:
 
     # --- [2] Evaluate Hybrid RAG Architecture ---
     logger.info("[2] Evaluating Hybrid RAG Architecture...")
-    hybrid_data = await _evaluate_pipeline(
-        eval_questions, HybridRetriever(), label="Hybrid"
+    # Run the retrieval loop inside a managed async context
+    hybrid_data = asyncio.run(
+        _evaluate_pipeline(eval_questions, HybridRetriever(), label="Hybrid")
     )
     hybrid_dataset = Dataset.from_dict(hybrid_data)
 
@@ -331,4 +337,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()
