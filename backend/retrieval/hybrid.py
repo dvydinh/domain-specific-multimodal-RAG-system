@@ -94,9 +94,15 @@ class HybridRetriever:
             result["image_results"] = vector_results["image_results"]
 
         elif query_type == QueryType.GRAPH_ONLY:
-            # Enrich graph-only results with full recipe details concurrently
+            # Enrich graph-only results with full recipe details concurrently (bounded to 10 queries)
+            semaphore = asyncio.Semaphore(10)
+            
+            async def bounded_get_details(recipe_id: str):
+                async with semaphore:
+                    return await self.graph_retriever.a_get_recipe_details(recipe_id)
+
             tasks = [
-                self.graph_retriever.a_get_recipe_details(r["id"])
+                bounded_get_details(r["id"])
                 for r in result["graph_results"] if r.get("id")
             ]
             if tasks:
