@@ -4,8 +4,7 @@ Comparative Evaluation: Vector Baseline vs Hybrid RAG.
 Demonstrates the performance difference of Graph-Hard-Filtering
 using a two-pipeline A/B benchmark with RAGAS metrics.
 
-Evaluator LLM: OpenAI GPT-3.5-Turbo (via RAGAS)
-Generator LLM: Google Gemini 2.0 Flash
+Evaluator/Generator LLM: Google Gemini 2.0 Flash (Monkey Patched)
 Embeddings: BAAI/bge-m3 (local)
 """
 
@@ -15,10 +14,21 @@ import glob
 import logging
 import os
 import sys
-import nest_asyncio
 
-# Apply nest_asyncio explicitly to prevent RAGAS internal event loop conflicts
-nest_asyncio.apply()
+# --- MONKEY PATCH BẮT BUỘC ĐỂ SỬA LỖI TEMPERATURE CỦA GEMINI VỚI RAGAS ---
+from langchain_google_genai.chat_models import ChatGoogleGenerativeAI
+original_agenerate = ChatGoogleGenerativeAI._agenerate
+async def patched_agenerate(self, *args, **kwargs):
+    # Lấy thông số từ đối tượng, loại bỏ temperature nếu nó bằng 0 hoặc không hợp lệ
+    gen_kwargs = self._get_ls_params() if hasattr(self, '_get_ls_params') else {}
+    if "temperature" in gen_kwargs:
+        del gen_kwargs["temperature"]
+    # Ép kwargs của hàm không được chứa temperature
+    if "temperature" in kwargs:
+         del kwargs["temperature"]
+    return await original_agenerate(self, *args, **kwargs)
+ChatGoogleGenerativeAI._agenerate = patched_agenerate
+# -------------------------------------------------------------------------
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -26,8 +36,6 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 from langchain_core.documents import Document
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_openai import ChatOpenAI
 from langchain_huggingface import HuggingFaceEmbeddings
 from datasets import Dataset
 from ragas import evaluate
@@ -49,22 +57,9 @@ logger = logging.getLogger(__name__)
 
 def generate_synthetic_dataset(
     n: int,
-    llm: ChatOpenAI,
+    llm: ChatGoogleGenerativeAI,
     embeddings: HuggingFaceEmbeddings,
 ) -> list[dict]:
-    """Generate synthetic evaluation questions using RAGAS TestsetGenerator.
-
-    Reads recipe JSON files from data/sample/ and produces a distribution
-    of simple, reasoning, and multi-context questions.
-
-    Args:
-        n: Number of test questions to generate.
-        llm: LangChain LLM wrapper for the generator/critic.
-        embeddings: LangChain embeddings wrapper for document indexing.
-
-    Returns:
-        List of dicts with 'question' and 'ground_truth' keys.
-    """
     data_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "data", "sample",
@@ -127,7 +122,7 @@ def generate_synthetic_dataset(
 
 
 # ================================================================
-# Pipeline Evaluation (DRY — shared by both Baseline and Hybrid)
+# Pipeline Evaluation
 # ================================================================
 
 async def _evaluate_pipeline(
@@ -135,16 +130,6 @@ async def _evaluate_pipeline(
     retriever: VectorRetriever | HybridRetriever,
     label: str,
 ) -> dict:
-    """Run a retrieval pipeline on all questions and collect RAGAS-compatible data.
-
-    Args:
-        questions: List of dicts with 'question' and 'ground_truth'.
-        retriever: Either a VectorRetriever (baseline) or HybridRetriever.
-        label: Human-readable label for logging (e.g., "Baseline", "Hybrid").
-
-    Returns:
-        Dict with 'question', 'answer', 'contexts', 'ground_truth' lists.
-    """
     synthesizer = ResponseSynthesizer()
 
     q_list: list[str] = []
@@ -156,7 +141,6 @@ async def _evaluate_pipeline(
         query = item["question"]
         logger.info(f"  [{label}] Processing question {i + 1}/{len(questions)}")
 
-        # Dispatch to the correct retrieval method
         if isinstance(retriever, HybridRetriever):
             results = await retriever.aretrieve(query, top_k=3, include_images=False)
         else:
@@ -182,13 +166,6 @@ def _save_benchmark_report(
     hybrid_score: dict,
     benchmarks_dir: str,
 ) -> None:
-    """Save detailed CSV reports and a JSON summary of the A/B benchmark.
-
-    Args:
-        baseline_score: RAGAS evaluation result for the baseline pipeline.
-        hybrid_score: RAGAS evaluation result for the hybrid pipeline.
-        benchmarks_dir: Directory to write report files to.
-    """
     import pandas as pd
 
     os.makedirs(benchmarks_dir, exist_ok=True)
@@ -229,8 +206,7 @@ def _save_benchmark_report(
 # Main Entry Point
 # ================================================================
 
-def main() -> None:
-    """Run the full A/B comparative evaluation: Pure Vector vs Hybrid RAG."""
+async def main() -> None:
     logging.basicConfig(
         level=logging.INFO,
         format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -246,26 +222,15 @@ def main() -> None:
         logger.error("GOOGLE_API_KEY is not set. Cannot run evaluation.")
         return
 
-    if not settings.openai_api_key:
-        logger.error("OPENAI_API_KEY is not set. Cannot run RAGAS evaluation.")
-        return
-
-    # Set OPENAI_API_KEY for RAGAS internals that read from env
-    os.environ["OPENAI_API_KEY"] = settings.openai_api_key
-
-    # --- Setup LLMs and Embeddings ---
-    logger.info(f"Evaluator LLM: {settings.openai_model}")
-    logger.info(f"Generator LLM: {settings.google_model}")
+    logger.info(f"Evaluator/Generator LLM: {settings.google_model}")
     logger.info(f"Embeddings: {settings.text_embedding_model}")
 
     gemini_llm = ChatGoogleGenerativeAI(
         model=settings.google_model,
-        temperature=0,
         max_retries=2,
     )
     bge_embeddings = HuggingFaceEmbeddings(model_name=settings.text_embedding_model)
 
-    # Wrap for RAGAS compatibility
     try:
         from ragas.llms import LangchainLLMWrapper
         from ragas.embeddings import LangchainEmbeddingsWrapper
@@ -275,11 +240,10 @@ def main() -> None:
         ragas_llm = gemini_llm
         ragas_emb = bge_embeddings
 
-    # --- Generate Synthetic Dataset ---
-    evaluator_llm = ChatOpenAI(model=settings.openai_model, temperature=0)
+    # DÙNG GEMINI ĐỂ GENERATE DATASET LUÔN
     eval_questions = generate_synthetic_dataset(
         n=settings.eval_test_size,
-        llm=evaluator_llm,
+        llm=gemini_llm, 
         embeddings=bge_embeddings,
     )
 
@@ -287,11 +251,9 @@ def main() -> None:
         logger.error("No evaluation questions generated. Aborting.")
         return
 
-    # --- [1] Evaluate Pure Vector Baseline ---
     logger.info("[1] Evaluating Pure Vector Baseline...")
-    # Run the retrieval loop inside a managed async context
-    baseline_data = asyncio.run(
-        _evaluate_pipeline(eval_questions, VectorRetriever(), label="Baseline")
+    baseline_data = await _evaluate_pipeline(
+        eval_questions, VectorRetriever(), label="Baseline"
     )
     baseline_dataset = Dataset.from_dict(baseline_data)
 
@@ -302,11 +264,9 @@ def main() -> None:
         embeddings=ragas_emb,
     )
 
-    # --- [2] Evaluate Hybrid RAG Architecture ---
     logger.info("[2] Evaluating Hybrid RAG Architecture...")
-    # Run the retrieval loop inside a managed async context
-    hybrid_data = asyncio.run(
-        _evaluate_pipeline(eval_questions, HybridRetriever(), label="Hybrid")
+    hybrid_data = await _evaluate_pipeline(
+        eval_questions, HybridRetriever(), label="Hybrid"
     )
     hybrid_dataset = Dataset.from_dict(hybrid_data)
 
@@ -317,7 +277,6 @@ def main() -> None:
         embeddings=ragas_emb,
     )
 
-    # --- Results ---
     logger.info("Comparative Benchmark Complete:")
     logger.info(
         f"Baseline -> Faithfulness: {baseline_score.get('faithfulness', 0):.4f}, "
@@ -328,7 +287,6 @@ def main() -> None:
         f"Answer Relevance: {hybrid_score.get('answer_relevancy', 0):.4f}"
     )
 
-    # --- Save Audit Trail ---
     benchmarks_dir = os.path.join(
         os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
         "benchmarks",
@@ -337,4 +295,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

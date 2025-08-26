@@ -22,9 +22,6 @@ class Settings(BaseSettings):
     google_api_key: str = Field(default="")
     google_model: str = Field(default="gemini-2.0-flash")
 
-    # --- OpenAI (RAGAS Evaluator) ---
-    openai_api_key: str = Field(default="")
-    openai_model: str = Field(default="gpt-3.5-turbo")
 
     # --- Neo4j ---
     neo4j_uri: str = Field(default="bolt://localhost:7687")
@@ -49,7 +46,7 @@ class Settings(BaseSettings):
     image_output_dir: str = Field(default="data/images")
 
     # --- Rate Limiting (Google AI Free Tier: 15 RPM) ---
-    api_cooldown_seconds: int = Field(default=5)
+    api_cooldown_seconds: int = Field(default=15)
     entity_batch_size: int = Field(default=2)
 
     # --- Evaluation ---
