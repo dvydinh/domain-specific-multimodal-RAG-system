@@ -121,7 +121,18 @@ async def main() -> None:
     gemini_llm = ChatGoogleGenerativeAI(model=settings.google_model)
     bge_embeddings = HuggingFaceEmbeddings(model_name=settings.text_embedding_model or "BAAI/bge-m3")
 
-    # 2. Configure RAGAS runtime for robust Free Tier operation
+    # 2. Ragas Wrapper Implementation (Senior standard for managed framework compatibility)
+    try:
+        from ragas.llms import LangchainLLMWrapper
+        from ragas.embeddings import LangchainEmbeddingsWrapper
+        ragas_llm = LangchainLLMWrapper(gemini_llm)
+        ragas_emb = LangchainEmbeddingsWrapper(bge_embeddings)
+    except ImportError:
+        # Fallback for older versions - ensuring data flow control
+        ragas_llm = gemini_llm
+        ragas_emb = bge_embeddings
+
+    # 3. Configure RAGAS runtime for robust Free Tier operation
     from ragas.run_config import RunConfig
     eval_config = RunConfig(timeout=120, max_retries=10, max_wait=120, max_workers=1)
 
@@ -129,28 +140,29 @@ async def main() -> None:
     if not eval_questions:
         return
 
-    # 3. Execution Phase
+    # 4. Phase 1: Baseline Evaluation
     logger.info("Phase 1: Baseline Evaluation...")
     baseline_data = await _evaluate_pipeline(eval_questions, VectorRetriever(), label="Baseline")
     baseline_score = evaluate(
         Dataset.from_dict(baseline_data),
         metrics=[faithfulness, answer_relevancy],
-        llm=gemini_llm, 
-        embeddings=bge_embeddings,
+        llm=ragas_llm,
+        embeddings=ragas_emb,
         run_config=eval_config
     )
 
+    # 5. Phase 2: Hybrid Evaluation
     logger.info("Phase 2: Hybrid Evaluation...")
     hybrid_data = await _evaluate_pipeline(eval_questions, HybridRetriever(), label="Hybrid")
     hybrid_score = evaluate(
         Dataset.from_dict(hybrid_data),
         metrics=[faithfulness, answer_relevancy],
-        llm=gemini_llm,
-        embeddings=bge_embeddings,
+        llm=ragas_llm,
+        embeddings=ragas_emb,
         run_config=eval_config
     )
 
-    # 4. Persistence Phase
+    # 6. Persistence Phase
     benchmarks_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "benchmarks")
     _save_benchmark_report(baseline_score, hybrid_score, benchmarks_dir)
 
