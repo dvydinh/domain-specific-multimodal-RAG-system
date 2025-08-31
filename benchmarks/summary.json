@@ -1,0 +1,14 @@
+{
+    "baseline": {
+        "faithfulness": 0.9642857142857143,
+        "answer_relevancy": 0.14285714285688036
+    },
+    "hybrid": {
+        "faithfulness": 0.8571428571428571,
+        "answer_relevancy": 0.2795233955941691
+    },
+    "improvements": {
+        "faithfulness_pct": -11.111111111111116,
+        "answer_relevancy_pct": 95.66637691627791
+    }
+}
