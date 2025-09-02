@@ -8,6 +8,7 @@ with inline citations [1], [2], etc.
 
 import logging
 from typing import Optional
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -53,6 +54,15 @@ class ResponseSynthesizer:
             max_output_tokens=2000,
         )
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(5),
+        reraise=True,
+        before_sleep=lambda retry_state: logger.warning(
+            f"Rate limit hit. Retrying in {retry_state.next_action.sleep}s... "
+            f"(Attempt {retry_state.attempt_number})"
+        )
+    )
     async def asynthesize(self, query: str, retrieval_results: dict) -> QueryResponse:
         """
         Generate a response with citations from retrieval results asynchronously.

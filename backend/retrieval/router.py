@@ -13,6 +13,7 @@ and determine the optimal retrieval path.
 import logging
 from enum import Enum
 from typing import Optional
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -72,7 +73,16 @@ class QueryRouter:
             max_output_tokens=20,
         )
 
-    async def aroute(self, query: str) -> QueryType:
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(5),
+        reraise=True,
+        before_sleep=lambda retry_state: logger.warning(
+            f"Rate limit hit during routing. Retrying in {retry_state.next_action.sleep}s... "
+            f"(Attempt {retry_state.attempt_number})"
+        )
+    )
+    async def aroute(self, query: str) -> QueryType:    
         """
         Classify a query into a retrieval strategy asymptotically.
 
