@@ -8,6 +8,7 @@ recipe IDs that match hard constraints (ingredients, tags, exclusions).
 
 import logging
 from typing import Optional
+from tenacity import retry, stop_after_attempt, wait_exponential
 
 import asyncio
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -133,6 +134,15 @@ class GraphRetriever:
             logger.info("Falling back to simple text search in graph")
             return await self._fallback_search(query)
 
+    @retry(
+        wait=wait_exponential(multiplier=1, min=4, max=60),
+        stop=stop_after_attempt(5),
+        reraise=True,
+        before_sleep=lambda retry_state: logger.warning(
+            f"Rate limit hit during Cypher generation. Retrying in {retry_state.next_action.sleep}s... "
+            f"(Attempt {retry_state.attempt_number})"
+        )
+    )
     async def _generate_cypher(self, query: str) -> str:
         """Generate a Cypher query from natural language using LLM asynchronously.
 
