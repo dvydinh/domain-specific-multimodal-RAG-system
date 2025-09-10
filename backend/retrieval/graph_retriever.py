@@ -19,56 +19,26 @@ from backend.config import get_settings
 
 logger = logging.getLogger(__name__)
 
-CYPHER_GENERATION_PROMPT = """You are a Cypher query expert for a Neo4j recipe database.
+PARAMETER_EXTRACTION_PROMPT = """You are a search parameter extractor for a recipe database.
+Your job is to extract search constraints from a user's query into a structured JSON format.
 
 Schema:
-- Nodes: (:Recipe {id, name, cuisine, source_pdf, page_number})
-- Nodes: (:Ingredient {name})  — names are lowercase
-- Nodes: (:Tag {name})
-- Relationships: (:Recipe)-[:CONTAINS_INGREDIENT]->(:Ingredient)
-- Relationships: (:Recipe)-[:HAS_TAG]->(:Tag)
+- include_ingredients: list of ingredients mentioned as needed (lowercase)
+- exclude_ingredients: list of ingredients to explicitly avoid (lowercase)
+- tags: list of tags like cuisine type (japanese, italian), dietary (vegan, vegetarian, spicy), or meal type.
 
-Rules for generating Cypher:
-1. Always return r.id and r.name at minimum
-2. Use case-insensitive matching: toLower(x.name) CONTAINS toLower('keyword')
-3. For exclusions ("without", "no"), use WHERE NOT pattern
-4. For inclusions, use MATCH pattern
-5. Return DISTINCT results
-6. Limit to 20 results unless specified otherwise
-7. Only output the Cypher query, no explanations
-8. CRITICAL: For relationship between Recipe and Ingredient, you MUST EXPLICITLY use `CONTAINS_INGREDIENT`. NEVER hallucinate relationship as `CONTAINS`. Example: `[:CONTAINS_INGREDIENT]` NOT `[:CONTAINS]`.
+Rules:
+1. ONLY output valid JSON. No explanations.
+2. Normalize all values to lowercase English.
+3. Handle synonyms (e.g., 'no meat' -> exclude: ['meat', 'pork', 'beef', 'chicken']).
+4. Extract tags like 'spicy', 'japanese', 'vegan' into the tags list.
 
-Examples:
+Example:
+Query: "Japanese spicy recipes without pork"
+Output: {"include_ingredients": [], "exclude_ingredients": ["pork"], "tags": ["japanese", "spicy"]}
 
-Query: "Japanese recipes that are spicy"
-Cypher:
-MATCH (r:Recipe)-[:HAS_TAG]->(t1:Tag), (r)-[:HAS_TAG]->(t2:Tag)
-WHERE toLower(t1.name) CONTAINS 'japanese' AND toLower(t2.name) CONTAINS 'spicy'
-RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
-LIMIT 20
-
-Query: "Recipes with pork but without scallion"
-Cypher:
-MATCH (r:Recipe)-[:CONTAINS_INGREDIENT]->(i:Ingredient)
-WHERE toLower(i.name) CONTAINS 'pork'
-AND NOT EXISTS {
-    MATCH (r)-[:CONTAINS_INGREDIENT]->(exc:Ingredient)
-    WHERE toLower(exc.name) CONTAINS 'scallion'
-}
-RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
-LIMIT 20
-
-Query: "Vegan recipes without nuts"
-Cypher:
-MATCH (r:Recipe)-[:HAS_TAG]->(t:Tag)
-WHERE toLower(t.name) CONTAINS 'vegan'
-AND NOT EXISTS {
-    MATCH (r)-[:CONTAINS_INGREDIENT]->(i:Ingredient)
-    WHERE toLower(i.name) CONTAINS 'nut' OR toLower(i.name) CONTAINS 'almond'
-    OR toLower(i.name) CONTAINS 'cashew' OR toLower(i.name) CONTAINS 'walnut'
-}
-RETURN DISTINCT r.id AS id, r.name AS name, r.cuisine AS cuisine
-LIMIT 20"""
+Query: "Beef recipes with onion"
+Output: {"include_ingredients": ["beef", "onion"], "exclude_ingredients": [], "tags": []}"""
 
 
 class GraphRetriever:
@@ -113,74 +83,98 @@ class GraphRetriever:
     async def aretrieve(self, query: str) -> list[dict]:
         """
         Retrieve recipes matching the query constraints asynchronously.
-
-        Flow: NL query → LLM → Cypher → Neo4j → Results
+        Uses a two-step process to prevent Cypher Injection:
+        1. Extract parameters from the query using LLM.
+        2. Execute a pre-defined safe Cypher template with these parameters.
         """
-        # Step 1: Generate Cypher query
-        cypher = await self._generate_cypher(query)
-        if not cypher:
-            logger.warning("Failed to generate Cypher query")
-            return []
+        # Step 1: Extract structured parameters
+        params = await self._generate_parameters(query)
+        if not params:
+            logger.info("No parameters extracted, falling back to keyword search")
+            return await self._fallback_search(query)
 
-        logger.info(f"Generated Cypher:\n{cypher}")
+        logger.info(f"Extracted Search Params: {params}")
 
-        # Step 2: Execute against Neo4j
+        # Step 2: Build and execute safe query
         try:
-            results = await self._execute_cypher(cypher)
+            results = await self._execute_parameterized_search(params)
             logger.info(f"Graph retrieval returned {len(results)} recipes")
             return results
         except Exception as e:
-            logger.error(f"Cypher execution failed: {e}")
-            logger.info("Falling back to simple text search in graph")
+            logger.error(f"Structured graph retrieval failed: {e}")
             return await self._fallback_search(query)
 
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
         stop=stop_after_attempt(5),
         reraise=True,
-        before_sleep=lambda retry_state: logger.warning(
-            f"Rate limit hit during Cypher generation. Retrying in {retry_state.next_action.sleep}s... "
-            f"(Attempt {retry_state.attempt_number})"
-        )
     )
-    async def _generate_cypher(self, query: str) -> str:
-        """Generate a Cypher query from natural language using LLM asynchronously.
-
-        Args:
-            query: Natural language query to translate.
-
-        Returns:
-            Generated Cypher query string, or empty string on failure.
-        """
+    async def _generate_parameters(self, query: str) -> Optional[dict]:
+        """Extract structured search parameters from natural language."""
         messages = [
-            SystemMessage(content=CYPHER_GENERATION_PROMPT),
-            HumanMessage(content=f"Generate a Cypher query for: {query}"),
+            SystemMessage(content=PARAMETER_EXTRACTION_PROMPT),
+            HumanMessage(content=f"Extract parameters for: {query}"),
         ]
 
         try:
             response = await self.llm.ainvoke(messages)
-            cypher = response.content.strip()
+            text = response.content.strip()
+            # Handle markdown blocks if present
+            if text.startswith("```"):
+                text = re.sub(r"```(?:json)?", "", text).replace("```", "").strip()
+            return json.loads(text)
         except Exception as e:
-            logger.error(f"Cypher generation LLM call failed: {e}")
-            return ""
+            logger.error(f"Parameter extraction LLM call failed: {e}")
+            return None
 
-        # Clean up common LLM formatting artifacts
-        if cypher.startswith("```"):
-            lines = cypher.split("\n")
-            cypher = "\n".join(
-                line for line in lines
-                if not line.startswith("```")
-            )
+    async def _execute_parameterized_search(self, params: dict) -> list[dict]:
+        """Execute a safe, pre-defined Cypher template using extracted parameters."""
+        include_ings = params.get("include_ingredients", [])
+        exclude_ings = params.get("exclude_ingredients", [])
+        tags = params.get("tags", [])
 
-        return cypher.strip()
+        # The core "Safe" query template
+        cypher = """
+        MATCH (r:Recipe)
+        
+        // Filter by included ingredients
+        WITH r
+        WHERE size($include_ings) = 0 
+           OR ALL(name IN $include_ings WHERE EXISTS {
+                MATCH (r)-[:CONTAINS_INGREDIENT]->(i:Ingredient)
+                WHERE toLower(i.name) CONTAINS name
+              })
+        
+        // Filter out excluded ingredients
+        WITH r
+        WHERE size($exclude_ings) = 0
+           OR NOT ANY(name IN $exclude_ings WHERE EXISTS {
+                MATCH (r)-[:CONTAINS_INGREDIENT]->(i:Ingredient)
+                WHERE toLower(i.name) CONTAINS name
+              })
+        
+        // Filter by tags
+        WITH r
+        WHERE size($tags) = 0
+           OR ALL(tag_name IN $tags WHERE EXISTS {
+                MATCH (r)-[:HAS_TAG]->(t:Tag)
+                WHERE toLower(t.name) CONTAINS tag_name
+              })
+              
+        RETURN r.id AS id, r.name AS name, r.cuisine AS cuisine
+        LIMIT 20
+        """
 
-    async def _execute_cypher(self, cypher: str) -> list[dict]:
-        """Execute a Cypher query and return results (running neo4j in a thread)."""
         def _run():
             with self._driver.session() as session:
-                # Use execute_read to prevent Cypher Injection from writing to the DB
-                result = session.execute_read(lambda tx: tx.run(cypher).data())
-                return result
+                return session.execute_read(
+                    lambda tx: tx.run(
+                        cypher, 
+                        include_ings=include_ings,
+                        exclude_ings=exclude_ings,
+                        tags=tags
+                    ).data()
+                )
         return await asyncio.to_thread(_run)
 
     async def _fallback_search(self, query: str) -> list[dict]:
