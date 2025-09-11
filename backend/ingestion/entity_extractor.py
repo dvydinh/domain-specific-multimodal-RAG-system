@@ -10,13 +10,10 @@ with newer Gemini 3.1-flash-preview schemas.
 """
 
 import logging
-import time
+import asyncio
 import json
 import re
 from typing import Optional
-
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
 from tenacity import retry, stop_after_attempt, wait_exponential
 import os
 from dotenv import load_dotenv
@@ -26,6 +23,8 @@ load_dotenv()
 from backend.config import get_settings
 from backend.models import ExtractedEntity, Ingredient, Tag
 from langchain_google_genai import HarmCategory, HarmBlockThreshold
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_core.messages import HumanMessage, SystemMessage
 
 logger = logging.getLogger(__name__)
 
@@ -57,32 +56,18 @@ EXPECTED JSON SCHEMA:
 }
 
 Rules:
-- Extract ALL recipes mentioned in the passage
 - Normalize ingredient names to lowercase English
-- Include cuisine-specific tags (e.g., "Japanese", "Italian")
-- Include dietary tags (e.g., "Vegan", "Vegetarian", "Gluten-Free")
-- Include flavor/style tags (e.g., "Spicy", "Sweet", "Comfort Food")
-- If the cuisine is identifiable, include it as both a tag and the cuisine field
-- Be thorough: extract even partial recipe mentions
-- If no recipe is found, return {"recipes": []}"""
+- Extract all recipes mentioned
+- Return {"recipes": []} if nothing is found."""
 
 
 class EntityExtractor:
     """
-    Extracts recipe entities from text using Google Gemini raw text output
-    managed via strict JSON prompts and manual validation handlers.
-
-    Rate-limited via configurable cooldown to stay within Google AI free tier
-    (15 RPM). Uses tenacity retry for transient API failures.
+    Extracts recipe entities from text using Google Gemini.
+    Rate-limited and production-hardened with non-blocking async execution.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
-        """Initialize the entity extractor with Gemini LLM.
-
-        Args:
-            api_key: Google API key. Falls back to settings if not provided.
-            model: Gemini model name. Falls back to settings if not provided.
-        """
         settings = get_settings()
 
         self.llm = ChatGoogleGenerativeAI(
@@ -91,41 +76,18 @@ class EntityExtractor:
             temperature=0,
             max_retries=1,
             timeout=60,
-            safety_settings={
-                HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-                HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-            }
         )
 
         self._cooldown = settings.api_cooldown_seconds
         self._batch_size = settings.entity_batch_size
-
-    def _clean_json_output(self, raw_text: str) -> str:
-        """Strip markdown ticks and potential conversational artifacts."""
-        cleaned = raw_text.strip()
-        # Remove typical markdown block format if present
-        if cleaned.startswith("```"):
-            cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE)
-            cleaned = re.sub(r"```$", "", cleaned.strip())
-        return cleaned.strip()
 
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
         stop=stop_after_attempt(5),
         reraise=True,
     )
-    def extract(self, text: str) -> list[ExtractedEntity]:
-        """
-        Extract recipe entities from a text passage.
-
-        Args:
-            text: Raw text from a PDF chunk or page.
-
-        Returns:
-            List of ExtractedEntity objects found in the text.
-        """
+    async def aextract(self, text: str) -> list[ExtractedEntity]:
+        """Extract entities asynchronously with production-grade retries."""
         if not text or len(text.strip()) < 20:
             return []
 
@@ -135,44 +97,25 @@ class EntityExtractor:
         ]
 
         try:
-            response = self.llm.invoke(messages)
-            if not response or not hasattr(response, 'content'):
-                logger.warning("LLM response is empty or malformed.")
-                return []
-            
+            # Use asyncio.to_thread for the synchronous invoke if ChatGoogleGenerativeAI 
+            # is blocking, or use ainvoke for native async.
+            response = await self.llm.ainvoke(messages)
             raw_text = response.content
-        except Exception as e:
-            logger.error(f"LLM API failure during extraction: {e}")
-            raise  # Let tenacity retry it
-
-        cleaned_json = self._clean_json_output(raw_text)
-
-        try:
+            
+            # Clean JSON formatting
+            cleaned_json = raw_text.strip()
+            if cleaned_json.startswith("```"):
+                cleaned_json = re.sub(r"```(?:json)?", "", cleaned_json).replace("```", "").strip()
+            
             data = json.loads(cleaned_json)
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON Parse Error: {e}\nRaw LLM output:\n{raw_text}")
-            # Raise exception so @retry knows to try asking the LLM again
-            raise ValueError(f"Failed to parse LLM valid JSON: {str(e)}")
-
-        entities = self._parse_result(data)
-        logger.info(f"Extracted {len(entities)} recipe entities from text chunk")
-        return entities
+            return self._parse_result(data)
+        except Exception as e:
+            logger.error(f"LLM extraction failed: {e}")
+            raise
 
     def _parse_result(self, result: dict) -> list[ExtractedEntity]:
-        """Convert safely parsed JSON dict to validated Pydantic models.
-
-        Args:
-            result: Parsed JSON dict matching the SYSTEM_PROMPT schema.
-
-        Returns:
-            List of validated ExtractedEntity models.
-        """
-        entities: list[ExtractedEntity] = []
-
-        if not isinstance(result, dict) or "recipes" not in result:
-            logger.warning("LLM JSON output did not contain 'recipes' key. Defaulting to empty.")
-            return entities
-
+        """Convert parsed JSON to Pydantic models."""
+        entities = []
         for recipe_data in result.get("recipes", []):
             try:
                 ingredients = [
@@ -184,65 +127,39 @@ class EntityExtractor:
                     for ing in recipe_data.get("ingredients", [])
                     if isinstance(ing, dict) and ing.get("name")
                 ]
-
-                tags = [
-                    Tag(name=tag.strip())
-                    for tag in recipe_data.get("tags", [])
-                    if isinstance(tag, str) and tag.strip()
-                ]
-
-                entity = ExtractedEntity(
+                tags = [Tag(name=tag.strip()) for tag in recipe_data.get("tags", []) if isinstance(tag, str)]
+                
+                entities.append(ExtractedEntity(
                     recipe_name=recipe_data.get("recipe_name", "Unknown Recipe"),
                     ingredients=ingredients,
                     tags=tags,
                     cuisine=recipe_data.get("cuisine"),
-                )
-                entities.append(entity)
-
-            except Exception as e:
-                # Catch Pydantic ValidationError or standard TypeErrors
-                logger.warning(f"Skipping malformed recipe data row - {e}")
-
+                ))
+            except Exception:
+                continue
         return entities
 
-    def extract_batch(self, texts: list[str]) -> list[ExtractedEntity]:
-        """
-        Extract entities from multiple text chunks with rate limiting.
-
-        Processes sequentially with a configurable cooldown between API calls
-        to respect Google AI free tier (15 RPM). Deduplicates recipes by name.
-
-        Args:
-            texts: List of text chunks to extract entities from.
-
-        Returns:
-            Deduplicated list of ExtractedEntity objects.
-        """
-        all_entities: list[ExtractedEntity] = []
-        seen_names: set[str] = set()
-        total_batches = (len(texts) + self._batch_size - 1) // self._batch_size
-
+    async def aextract_batch(self, texts: list[str]) -> list[ExtractedEntity]:
+        """Process batches asynchronously with non-blocking cooldowns."""
+        all_entities = []
+        seen_names = set()
+        
         for i in range(0, len(texts), self._batch_size):
-            batch_num = i // self._batch_size + 1
             batch = texts[i:i + self._batch_size]
             combined = "\n\n---\n\n".join(batch)
-
-            logger.info(f"Processing batch {batch_num}/{total_batches} ({len(batch)} chunks)...")
-
+            
             try:
-                entities = self.extract(combined)
+                entities = await self.aextract(combined)
                 for entity in entities:
                     normalized = entity.recipe_name.lower().strip()
                     if normalized not in seen_names:
                         seen_names.add(normalized)
                         all_entities.append(entity)
             except Exception as e:
-                logger.error(f"Batch extraction ultimately failed for batch {batch_num} after retries: {e}")
+                logger.error(f"Batch failed: {e}")
 
-            # Rate limit: sleep between API calls to stay under 15 RPM
             if i + self._batch_size < len(texts):
-                logger.info(f"Rate limit cooldown: sleeping {self._cooldown}s...")
-                time.sleep(self._cooldown)
+                # Non-blocking async sleep — CRITICAL for production API performance
+                await asyncio.sleep(self._cooldown)
 
-        logger.info(f"Total unique entities extracted: {len(all_entities)}")
         return all_entities
