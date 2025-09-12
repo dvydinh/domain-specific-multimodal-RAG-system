@@ -1,13 +1,13 @@
 """
-LLM-based query router.
+LLM-based query router with Heuristic optimization.
 
 Classifies incoming queries into retrieval strategies:
   - GRAPH_ONLY:  Hard constraints present (specific ingredients, exclusions, tags)
   - VECTOR_ONLY: Pure semantic/similarity search (cooking techniques, general questions)
   - HYBRID:      Both hard constraints and semantic content needed
 
-The router uses a lightweight LLM prompt to analyze the query structure
-and determine the optimal retrieval path.
+The router uses a high-performance heuristic layer (Regex/Keywords) before 
+falling back to an Adaptive LLM Classifier.
 """
 
 import logging
@@ -15,12 +15,10 @@ from enum import Enum
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
-from dotenv import load_dotenv
 from backend.config import get_settings
-load_dotenv()
+
 logger = logging.getLogger(__name__)
 
 
@@ -34,34 +32,17 @@ class QueryType(str, Enum):
 ROUTER_SYSTEM_PROMPT = """You are a query classifier for a recipe search system.
 Analyze the user's query and determine the best retrieval strategy.
 
-The system has two data stores:
-1. KNOWLEDGE GRAPH (Neo4j): Contains structured recipe data — recipe names, ingredients,
-   tags (cuisine type, dietary labels like Vegan/Spicy), and relationships between them.
-   Best for: exact matching, filtering by ingredient, excluding ingredients, filtering by tag.
-
-2. VECTOR DATABASE (Qdrant): Contains recipe instruction text and food images as embeddings.
-   Best for: semantic search, finding similar recipes, answering "how to cook" questions.
-
 Classification rules:
-- GRAPH_ONLY: Query has ONLY hard constraints (specific ingredients, tags, exclusions,
-  cuisine type) with no need for detailed instructions. Example: "List Japanese vegan recipes"
-- VECTOR_ONLY: Query is about cooking techniques, general knowledge, or similarity search
-  with no specific constraints. Example: "How do I make a creamy soup?"
-- HYBRID: Query has BOTH hard constraints AND needs detailed content. This is the most
-  common case. Example: "Show me a spicy Japanese recipe without pork, with instructions"
+- GRAPH_ONLY: Query has ONLY hard constraints (ingredients, tags, exclusions).
+- VECTOR_ONLY: Query is about techniques, general knowledge, or "how to" without specific constraints.
+- HYBRID: Query has BOTH hard constraints AND needs detailed content/instructions.
 
 Respond with EXACTLY one word: GRAPH_ONLY, VECTOR_ONLY, or HYBRID"""
 
 
 class QueryRouter:
     """
-    Routes queries to the appropriate retrieval strategy.
-
-    Uses an LLM to analyze query intent and detect:
-    - Ingredient inclusion/exclusion patterns
-    - Tag/cuisine constraints
-    - Semantic similarity needs
-    - Instruction/detail requests
+    Routes queries to the appropriate retrieval strategy with Heuristic bypass.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
@@ -76,22 +57,19 @@ class QueryRouter:
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
         stop=stop_after_attempt(5),
-        reraise=True,
-        before_sleep=lambda retry_state: logger.warning(
-            f"Rate limit hit during routing. Retrying in {retry_state.next_action.sleep}s... "
-            f"(Attempt {retry_state.attempt_number})"
-        )
+        reraise=True
     )
-    async def aroute(self, query: str) -> QueryType:    
+    async def aroute(self, query: str) -> QueryType:
         """
-        Classify a query into a retrieval strategy asymptotically.
-
-        Args:
-            query: User's natural language question.
-
-        Returns:
-            QueryType enum value.
+        Classify a query into a retrieval strategy.
+        Uses a high-performance heuristic layer before falling back to LLM.
         """
+        # Step 1: High-performance Heuristic Layer (Deterministic)
+        heuristic_result = self._heuristic_classify(query)
+        if heuristic_result:
+            return heuristic_result
+
+        # Step 2: Adaptive LLM Routing (Fallback)
         messages = [
             SystemMessage(content=ROUTER_SYSTEM_PROMPT),
             HumanMessage(content=f"Classify this query: {query}"),
@@ -101,58 +79,41 @@ class QueryRouter:
             response = await self.llm.ainvoke(messages)
             classification = response.content.strip().upper()
 
-            # Parse the LLM response
             if "GRAPH_ONLY" in classification:
-                result = QueryType.GRAPH_ONLY
+                return QueryType.GRAPH_ONLY
             elif "VECTOR_ONLY" in classification:
-                result = QueryType.VECTOR_ONLY
-            else:
-                result = QueryType.HYBRID
-
-            logger.info(f"Query routed to: {result.value} | Query: '{query[:80]}...'")
-            return result
-
-        except Exception as e:
-            logger.warning(f"Router failed, defaulting to HYBRID: {e}")
+                return QueryType.VECTOR_ONLY
             return QueryType.HYBRID
 
-    async def aroute_with_analysis(self, query: str) -> dict:
+        except Exception as e:
+            logger.warning(f"LLM Router failed, defaulting to HYBRID: {e}")
+            return QueryType.HYBRID
+
+    def _heuristic_classify(self, query: str) -> Optional[QueryType]:
         """
-        Route with additional analysis details concurrently.
-
-        Returns:
-            Dict with query_type and detected features.
+        Deterministic keyword routing for common patterns. 
+        Minimizes latency for obvious queries.
         """
-        query_type = await self.aroute(query)
+        q = query.lower()
+        
+        # Obvious Graph-heavy patterns
+        graph_triggers = [
+            "without", "no ", "not ", "exclude", "list recipes with",
+            "ingredients for", "no meat", "vegan", "vegetarian"
+        ]
+        
+        # Obvious Vector-heavy patterns
+        vector_triggers = [
+            "how to", "how do i", "steps to", "instructions", "prepare",
+            "cook", "what is"
+        ]
 
-        # Simple heuristic analysis for logging/debugging
-        query_lower = query.lower()
-        features = {
-            "has_negation": any(w in query_lower for w in [
-                "without", "no ", "not ", "exclude",
-                "don't", "never", "avoid"
-            ]),
-            "has_ingredient_mention": any(w in query_lower for w in [
-                "ingredient", "contain", "use", "with", "has",
-            ]),
-            "has_cuisine_tag": any(w in query_lower for w in [
-                "japanese", "italian", "vietnamese", "chinese",
-                "korean", "thai", "french", "indian", "mexican"
-            ]),
-            "has_dietary_tag": any(w in query_lower for w in [
-                "vegan", "vegetarian", "gluten-free", "spicy",
-                "healthy"
-            ]),
-            "wants_instructions": any(w in query_lower for w in [
-                "how", "recipe", "cook", "make", "prepare",
-                "instructions", "steps"
-            ]),
-            "wants_images": any(w in query_lower for w in [
-                "image", "photo", "picture", "show me"
-            ]),
-        }
+        has_graph = any(t in q for t in graph_triggers)
+        has_vector = any(t in q for t in vector_triggers)
 
-        return {
-            "query_type": query_type.value,
-            "features": features,
-        }
+        if has_graph and not has_vector:
+            return QueryType.GRAPH_ONLY
+        if has_vector and not has_graph:
+            return QueryType.VECTOR_ONLY
+        
+        return None
