@@ -17,6 +17,7 @@ from typing import Optional
 from backend.retrieval.router import QueryRouter, QueryType
 from backend.retrieval.graph_retriever import GraphRetriever
 from backend.retrieval.vector_retriever import VectorRetriever
+from backend.utils.telemetry import trace_logger
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,8 @@ class HybridRetriever:
           - Graph must finish before Vector (sequential dependency)
           - Vector text and image searches run concurrently via aretrieve_all
         """
+        trace_id = trace_logger.start_trace(query)
+        
         # --- Concurrent: Router + Graph ---
         routing, graph_results = await asyncio.gather(
             self.router.aroute_with_analysis(query),
@@ -57,6 +60,8 @@ class HybridRetriever:
         )
 
         query_type = QueryType(routing["query_type"])
+        trace_logger.log_event(trace_id, "routing_complete", {"type": query_type.value})
+        
         logger.info(f"[Hybrid] type={query_type.value} | query='{query[:80]}'")
 
         result = {
@@ -115,6 +120,13 @@ class HybridRetriever:
             f"text={len(result['text_results'])}, "
             f"images={len(result['image_results'])}"
         )
+        
+        trace_logger.log_event(trace_id, "retrieval_complete", {
+            "graph_count": len(result['graph_results']),
+            "text_count": len(result['text_results']),
+            "image_count": len(result['image_results'])
+        })
+        
         return result
 
     def close(self):
