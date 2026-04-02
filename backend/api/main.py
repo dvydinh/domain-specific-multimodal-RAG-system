@@ -37,17 +37,20 @@ async def lifespan(app: FastAPI):
     from backend.retrieval.hybrid import HybridRetriever
     from backend.generation.synthesizer import ResponseSynthesizer
     from backend.ingestion.graph_builder import GraphBuilder
+    from backend.ingestion.vector_store import VectorStoreManager
 
     # Initialize singletons on app.state for Dependency Injection
     app.state.retriever = HybridRetriever()
     app.state.synthesizer = ResponseSynthesizer()
     app.state.graph = GraphBuilder()
+    app.state.vector_store = VectorStoreManager()
 
     yield
 
     logger.info("Shutting down RAG services...")
     app.state.retriever.close()
     app.state.graph.close()
+    # VectorStoreManager doesn't have a close(), but we manage its lifecycle here
     logger.info("Shutdown complete.")
 
 

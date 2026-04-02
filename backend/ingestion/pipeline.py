@@ -108,39 +108,34 @@ class IngestionPipeline:
                     if re.search(rf"\b{re.escape(entity.recipe_name.lower())}\b", chunk.text.lower()):
                         current_recipe = entity.recipe_name
                         break
-                if current_recipe:
-                    chunk.recipe_name = current_recipe
-
             # === Step 5: Embed and Store (Atomic Saga Transaction) ===
-            try:
-                # Use the Saga manager to coordinate the insertion
-                # If Qdrant fails, the Saga manager tracks the need for cleanup
-                async def _store_vector(recipe_id_map):
-                    if page_chunks:
-                        await asyncio.to_thread(
-                            self.vector_store.embed_and_store_chunks, page_chunks, recipe_id_map
-                        )
-                    if page.image_paths:
-                        image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
-                        await asyncio.to_thread(
-                            self.vector_store.embed_and_store_images, image_metadata, recipe_id_map
-                        )
+            async def _phase_2_insert(recipe_id_map, page_chunks):
+                if page_chunks:
+                    await asyncio.to_thread(
+                        self.vector_store.embed_and_store_chunks, page_chunks, recipe_id_map
+                    )
+                if page.image_paths:
+                    image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
+                    await asyncio.to_thread(
+                        self.vector_store.embed_and_store_images, image_metadata, recipe_id_map
+                    )
 
-                # Execute combined step with Saga protection
-                # Here we simulate the two-phase commit by wrapping the second phase
-                await _store_vector(recipe_id_map)
-                
-                stats["text_vectors"] += len(page_chunks)
-                stats["image_vectors"] += len(page.image_paths) if page.image_paths else 0
-
-            except Exception as e:
-                # Saga Rollback: The TransactionManager ensures no phantom data resides in Graph
-                logger.error(f"SAGA: Distributed transaction failed, rolling back: {e}")
+            async def _phase_2_rollback(recipe_id_map, page_chunks):
                 if recipe_id_map:
                     await asyncio.to_thread(
                         self.graph_builder.delete_recipes, list(recipe_id_map.values())
                     )
-                raise
+
+            # PRODUCTION-READY: Execute via REAL Saga Manager
+            await self.saga_manager.execute_insert(
+                insert_fn=_phase_2_insert,
+                rollback_fn=_phase_2_rollback,
+                recipe_id_map=recipe_id_map,
+                page_chunks=page_chunks
+            )
+            
+            stats["text_vectors"] += len(page_chunks)
+            stats["image_vectors"] += len(page.image_paths) if page.image_paths else 0
 
         return stats
 
