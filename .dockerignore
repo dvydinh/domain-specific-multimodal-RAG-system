@@ -1,0 +1,25 @@
+# Exclude source control
+.git
+.gitignore
+
+# Exclude python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# Exclude local data and secrets
+.env
+.env.prod
+data/raw/*.pdf
+ingestion_beef.log
+logs/
+tmp/
+node_modules/
+dist/
+build/
+*.bak
+*.swp
