@@ -42,6 +42,9 @@ def get_graph(request: Request) -> GraphBuilder:
 def get_vector_store(request: Request) -> VectorStoreManager:
     return request.app.state.vector_store
 
+def get_saga_manager(request: Request) -> SagaTransactionManager:
+    return request.app.state.saga
+
 
 # ================================================================
 # Endpoints
@@ -163,7 +166,8 @@ async def upload_document(
     background_tasks: BackgroundTasks, 
     file: UploadFile = File(...),
     graph: GraphBuilder = Depends(get_graph),
-    vector_store: VectorStoreManager = Depends(get_vector_store)
+    vector_store: VectorStoreManager = Depends(get_vector_store),
+    saga: SagaTransactionManager = Depends(get_saga_manager)
 ):
     """
     Upload a PDF cookbook document for ingestion.
@@ -183,10 +187,14 @@ async def upload_document(
         logger.error(f"Failed to save file {dest}: {e}")
         raise HTTPException(status_code=500, detail="Failed to securely save the uploaded document.")
 
-    # PRODUCTION FIX: Initialize Pipeline with shared DB connections
-    pipeline = IngestionPipeline(graph_builder=graph, vector_store=vector_store)
+    # PRODUCTION FIX: Initialize Pipeline with shared DB connections AND shared Saga Manager
+    pipeline = IngestionPipeline(
+        graph_builder=graph, 
+        vector_store=vector_store,
+        saga_manager=saga
+    )
     
-    # Native FastAPI Async Background Task (No manual event loop needed!)
+    # Native FastAPI Async Background Task
     background_tasks.add_task(pipeline.aingest, str(dest))
 
     return {
