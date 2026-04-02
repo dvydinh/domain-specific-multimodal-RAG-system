@@ -1,6 +1,7 @@
 version: "3.9"
 
 services:
+  # === Database: Knowledge Graph (Neo4j) ===
   neo4j:
     image: neo4j:5.20-community
     container_name: rag-neo4j
@@ -20,6 +21,7 @@ services:
       timeout: 10s
       retries: 5
 
+  # === Database: Vector Store (Qdrant) ===
   qdrant:
     image: qdrant/qdrant:v1.10.1
     container_name: rag-qdrant
@@ -34,6 +36,43 @@ services:
       interval: 10s
       timeout: 5s
       retries: 3
+
+  # === Backend: FastAPI Multimodal RAG Application ===
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: rag-api
+    ports:
+      - "8000:8000"
+    environment:
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - GOOGLE_MODEL=${GOOGLE_MODEL:-gemini-1.5-flash-preview}
+      - NEO4J_URI=bolt://neo4j:7687
+      - NEO4J_USER=neo4j
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD:-ragpassword}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+    # Production Hardening: Ensure DBs are healthy before starting the API
+    depends_on:
+      neo4j:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    restart: always
+
+  # === Frontend: React/Vite UI (Nginx) ===
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: rag-frontend
+    ports:
+      - "80:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: always
 
 volumes:
   neo4j_data:

@@ -155,18 +155,33 @@ def _check_qdrant() -> str:
 
 from backend.ingestion.pipeline import IngestionPipeline
 
-def _run_ingestion(file_path: str):
-    """Background task: run the full ingestion pipeline on the uploaded PDF."""
+def _run_ingestion(file_path: str, graph: GraphBuilder):
+    """
+    Background task: run the full ingestion pipeline on the uploaded PDF.
+    Uses shared dependencies to prevent connection leaks.
+    """
     try:
-        pipeline = IngestionPipeline()
-        stats = pipeline.ingest(file_path)
+        # In PRD, we'd also pass VectorStoreManager from app.state
+        from backend.ingestion.vector_store import VectorStoreManager
+        vs = VectorStoreManager() 
+        
+        pipeline = IngestionPipeline(graph_builder=graph, vector_store=vs)
+        
+        import asyncio
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        stats = loop.run_until_complete(pipeline.aingest(file_path))
         logger.info(f"Background ingestion completed: {stats}")
     except Exception as e:
         logger.error(f"Background ingestion failed for {file_path}: {e}", exc_info=True)
 
 
 @router.post("/upload")
-async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+async def upload_document(
+    background_tasks: BackgroundTasks, 
+    file: UploadFile = File(...),
+    graph: GraphBuilder = Depends(get_graph)
+):
     """
     Upload a PDF cookbook document for ingestion.
 
@@ -189,8 +204,8 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
         logger.error(f"Failed to save file {dest}: {e}")
         raise HTTPException(status_code=500, detail="Failed to securely save the uploaded document.")
 
-    # Dispatch ingestion as background task
-    background_tasks.add_task(_run_ingestion, str(dest))
+    # Dispatch ingestion as background task with shared connections
+    background_tasks.add_task(_run_ingestion, str(dest), graph)
 
     return {
         "status": "accepted",
