@@ -48,37 +48,28 @@ class TextChunker:
         page_number: int = 0,
     ) -> list[ChunkMetadata]:
         """
-        Split a text string into overlapping chunks.
-
-        Args:
-            text: The full text to chunk.
-            source_pdf: Source PDF filename for metadata.
-            page_number: Page number in the source PDF.
-
-        Returns:
-            List of ChunkMetadata objects with text and positional info.
+        Split a text string into overlapping chunks while preserving character offsets.
         """
         if not text or not text.strip():
             return []
 
-        text = text.strip()
-        splits = self.splitter.split_text(text)
+        # create_documents returns a list of Document objects with metadata["start_index"]
+        docs = self.splitter.create_documents([text])
 
         chunks: list[ChunkMetadata] = []
-        for i, split in enumerate(splits):
-            chunk_text = split.strip()
+        for i, doc in enumerate(docs):
+            chunk_text = doc.page_content.strip()
             if chunk_text:
+                # Store the absolute start_index from the splitter
+                start_idx = doc.metadata.get("start_index", 0)
                 chunks.append(ChunkMetadata(
                     text=chunk_text,
                     source_pdf=source_pdf,
                     page_number=page_number,
                     chunk_index=i,
+                    start_index=start_idx  # NEW: Preserve offset for accurate Bbox lookup
                 ))
 
-        logger.debug(
-            f"Chunked {len(text)} chars into {len(chunks)} chunks "
-            f"(size={self.chunk_size}, overlap={self.chunk_overlap})"
-        )
         return chunks
 
     def chunk_pages(
@@ -136,17 +127,10 @@ class TextChunker:
                 num_blocks = len(blocks)
 
                 for chunk in page_chunks:
-                    # Locate chunk in page_text starting from cursor
-                    chunk_start = page_text.find(chunk.text, cursor)
-                    if chunk_start == -1:
-                        # Overlap chunks may start before cursor; scan from 0
-                        chunk_start = page_text.find(chunk.text)
-                    if chunk_start == -1:
-                        continue
-
+                    # SECURE FIX: Use the preserved start_index from the splitter
+                    # instead of naive find() string matching.
+                    chunk_start = getattr(chunk, "start_index", 0)
                     chunk_end = chunk_start + len(chunk.text)
-                    # Advance cursor past this chunk's non-overlapping start
-                    cursor = chunk_start + 1
 
                     # Advance block_ptr to first block that could overlap
                     # (skip blocks that end before chunk starts)

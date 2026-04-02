@@ -201,6 +201,7 @@ class GraphBuilder:
 
         for entity in entities:
             try:
+                # add_recipe is already transactional internally
                 rid = self.add_recipe(entity, source_pdf=source_pdf)
                 recipe_ids[entity.recipe_name] = rid
             except Exception as e:
@@ -208,6 +209,21 @@ class GraphBuilder:
 
         logger.info(f"Added {len(recipe_ids)} recipes to graph")
         return recipe_ids
+
+    def delete_recipes(self, recipe_ids: list[str]):
+        """
+        Rollback/Compensating transaction: Delete recipes by their UUIDs.
+        Used to maintain ETL atomicity if downstream vector storage fails.
+        """
+        if not recipe_ids:
+            return
+            
+        with self._driver.session() as session:
+            session.run(
+                "MATCH (r:Recipe) WHERE r.id IN $ids DETACH DELETE r",
+                ids=recipe_ids
+            )
+        logger.warning(f"Rolled back {len(recipe_ids)} recipes from graph")
 
     # ================================================================
     # Query Helpers
