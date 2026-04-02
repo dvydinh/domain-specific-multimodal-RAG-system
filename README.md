@@ -89,3 +89,4 @@ Access the UI at `http://localhost:5173`. Detailed evaluation artifacts (CSV/JSO
 - **Framework:** FastAPI + React + Vite
 - **Evaluation:** Ragas + Datasets (HuggingFace)
 - **Reliability:** Tenacity (Exponential Backoff)
+$content
