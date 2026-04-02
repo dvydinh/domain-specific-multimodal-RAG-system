@@ -135,6 +135,27 @@ class SagaTransactionManager:
             logger.warning("  -> Outbox marked NEO4J_DONE. Background worker will retry.")
             raise
 
+    async def execute_insert(
+        self,
+        insert_fn: Callable,
+        rollback_fn: Callable,
+        *args, **kwargs
+    ) -> any:
+        """
+        Execute an ingestion step with Saga protection.
+        If the primary insert fails, the compensating rollback is triggered.
+        """
+        tx_id = self.outbox.create("INSERT", {"args": str(args)})
+        try:
+            result = await insert_fn(*args, **kwargs)
+            self.outbox.update_status(tx_id, TransactionStatus.COMPLETED)
+            return result
+        except Exception as e:
+            logger.error(f"SAGA: Insert failed, triggering rollback: {e}")
+            self.outbox.update_status(tx_id, TransactionStatus.FAILED)
+            await rollback_fn(*args, **kwargs)
+            raise
+
     async def _background_retry_worker(self) -> None:
         """Worker that continuously scans Outbox for stuck transactions to retry.
 
