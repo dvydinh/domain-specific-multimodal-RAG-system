@@ -89,6 +89,26 @@ class QueryRouter:
             logger.warning(f"LLM Router failed, defaulting to HYBRID: {e}")
             return QueryType.HYBRID
 
+    async def aroute_with_analysis(self, query: str) -> dict:
+        """
+        Route with additional analysis details concurrently.
+        """
+        query_type = await self.aroute(query)
+        q_lower = query.lower()
+        
+        # Consistent professional analysis features
+        features = {
+            "has_negation": any(w in q_lower for w in ["without", "no ", "not ", "exclude"]),
+            "has_ingredient_mention": any(w in q_lower for w in ["ingredient", "use", "with"]),
+            "has_cuisine_tag": any(w in q_lower for w in ["japanese", "italian", "vietnamese"]),
+            "wants_instructions": any(w in q_lower for w in ["how", "recipe", "cook", "make"]),
+        }
+
+        return {
+            "query_type": query_type.value,
+            "features": features,
+        }
+
     def _heuristic_classify(self, query: str) -> Optional[QueryType]:
         """
         Deterministic keyword routing for common patterns. 
