@@ -9,10 +9,11 @@ Endpoints:
 """
 
 import logging
+import asyncio
 import shutil
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks
+from fastapi import APIRouter, HTTPException, UploadFile, File, BackgroundTasks, Depends, Request
 from fastapi.responses import FileResponse
 
 from backend.config import get_settings
@@ -25,31 +26,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["RAG API"])
 
-# Lazy-initialized singletons (created on first request)
-_retriever: HybridRetriever | None = None
-_synthesizer: ResponseSynthesizer | None = None
-_graph: GraphBuilder | None = None
+# ================================================================
+# Dependencies (DI for Scalability)
+# ================================================================
 
+def get_retriever(request: Request) -> HybridRetriever:
+    return request.app.state.retriever
 
-def _get_retriever() -> HybridRetriever:
-    global _retriever
-    if _retriever is None:
-        _retriever = HybridRetriever()
-    return _retriever
+def get_synthesizer(request: Request) -> ResponseSynthesizer:
+    return request.app.state.synthesizer
 
-
-def _get_synthesizer() -> ResponseSynthesizer:
-    global _synthesizer
-    if _synthesizer is None:
-        _synthesizer = ResponseSynthesizer()
-    return _synthesizer
-
-
-def _get_graph() -> GraphBuilder:
-    global _graph
-    if _graph is None:
-        _graph = GraphBuilder()
-    return _graph
+def get_graph(request: Request) -> GraphBuilder:
+    return request.app.state.graph
 
 
 # ================================================================
@@ -57,30 +45,17 @@ def _get_graph() -> GraphBuilder:
 # ================================================================
 
 @router.post("/query", response_model=QueryResponse)
-async def query_endpoint(request: QueryRequest) -> QueryResponse:
+async def query_endpoint(
+    request: QueryRequest,
+    retriever: HybridRetriever = Depends(get_retriever),
+    synthesizer: ResponseSynthesizer = Depends(get_synthesizer)
+) -> QueryResponse:
     """
     Submit a natural language query and receive a cited response.
-
-    The system will:
-    1. Route the query (graph/vector/hybrid)
-    2. Retrieve relevant data from Neo4j and/or Qdrant
-    3. Synthesize a response with inline citations
-
-    Example request:
-    ```json
-    {
-        "question": "Find me a spicy Japanese recipe without pork",
-        "include_images": true,
-        "top_k": 5
-    }
-    ```
     """
     logger.info(f"Query received: {request.question[:100]}...")
 
     try:
-        retriever = _get_retriever()
-        synthesizer = _get_synthesizer()
-
         # Step 1-3: Hybrid retrieval (Async)
         retrieval_results = await retriever.aretrieve(
             query=request.question,
@@ -93,23 +68,21 @@ async def query_endpoint(request: QueryRequest) -> QueryResponse:
             query=request.question,
             retrieval_results=retrieval_results,
         )
-
-        logger.info(
-            f"Response generated: {len(response.citations)} citations, "
-            f"type={response.query_type}"
-        )
         return response
 
     except Exception as e:
+        # Security: Log internal error privately, mask for Client
         logger.error(f"Query processing failed: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Query processing failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail="An unexpected error occurred while processing your query. Please try again later."
+        )
 
 
 @router.get("/recipes", response_model=list[RecipeSummary])
-async def list_recipes() -> list[RecipeSummary]:
+async def list_recipes(graph: GraphBuilder = Depends(get_graph)) -> list[RecipeSummary]:
     """List all recipes in the knowledge graph."""
     try:
-        graph = _get_graph()
         recipes = graph.get_all_recipes()
 
         return [
@@ -124,18 +97,18 @@ async def list_recipes() -> list[RecipeSummary]:
         ]
     except Exception as e:
         logger.error(f"Failed to list recipes: {e}")
-        raise HTTPException(status_code=500, detail="Failed to retrieve recipes")
+        raise HTTPException(status_code=500, detail="Failed to retrieve recipe list.")
 
 
 @router.get("/health")
-async def health_check():
-    """System health check."""
+async def health_check(request: Request):
+    """System health check (Live monitoring)."""
     return {
         "status": "healthy",
         "service": "domain-specific-multimodal-rag",
         "components": {
             "api": "up",
-            "neo4j": _check_neo4j(),
+            "neo4j": _check_neo4j(request.app.state.graph),
             "qdrant": _check_qdrant(),
         }
     }
@@ -157,9 +130,8 @@ async def serve_image(filename: str):
 # Health Check Helpers
 # ================================================================
 
-def _check_neo4j() -> str:
+def _check_neo4j(graph: GraphBuilder) -> str:
     try:
-        graph = _get_graph()
         graph.get_all_recipes()
         return "up"
     except Exception:
@@ -210,10 +182,12 @@ async def upload_document(background_tasks: BackgroundTasks, file: UploadFile = 
     dest = raw_dir / file.filename
 
     try:
+        # Production Fix: Use to_thread for blocking shutil I/O
         with open(dest, "wb") as buf:
-            shutil.copyfileobj(file.file, buf)
+            await asyncio.to_thread(shutil.copyfileobj, file.file, buf)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {str(e)}")
+        logger.error(f"Failed to save file {dest}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to securely save the uploaded document.")
 
     # Dispatch ingestion as background task
     background_tasks.add_task(_run_ingestion, str(dest))

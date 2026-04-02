@@ -109,19 +109,28 @@ class IngestionPipeline:
                 if current_recipe:
                     chunk.recipe_name = current_recipe
 
-            # Step 5: Embed and Store (CPU-bound, wrap in thread)
-            if page_chunks:
-                text_count = await asyncio.to_thread(
-                    self.vector_store.embed_and_store_chunks, page_chunks, recipe_id_map
-                )
-                stats["text_vectors"] += text_count
+            # === Step 5: Embed and Store (Atomic Transaction Block) ===
+            try:
+                if page_chunks:
+                    text_count = await asyncio.to_thread(
+                        self.vector_store.embed_and_store_chunks, page_chunks, recipe_id_map
+                    )
+                    stats["text_vectors"] += text_count
 
-            if page.image_paths:
-                image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
-                image_count = await asyncio.to_thread(
-                    self.vector_store.embed_and_store_images, image_metadata, recipe_id_map
-                )
-                stats["image_vectors"] += image_count
+                if page.image_paths:
+                    image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
+                    image_count = await asyncio.to_thread(
+                        self.vector_store.embed_and_store_images, image_metadata, recipe_id_map
+                    )
+                    stats["image_vectors"] += image_count
+            except Exception as e:
+                # ROLLBACK: Prevent inconsistent state between Graph and Vector store
+                logger.error(f"Vector storage failed, rolling back Neo4j nodes: {e}")
+                if recipe_id_map:
+                    await asyncio.to_thread(
+                        self.graph_builder.delete_recipes, list(recipe_id_map.values())
+                    )
+                raise  # Re-raise to ensure the overall pipeline status is correctly reported
 
         return stats
 

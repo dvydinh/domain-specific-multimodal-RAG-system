@@ -26,22 +26,29 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Application lifespan: startup and shutdown events."""
+    """
+    Application lifespan: Manage database connections and singletons.
+    Ensures clean startup and teardown to prevent connection leaks.
+    """
     logger.info("=" * 60)
-    logger.info("Starting Domain-Specific Multimodal RAG System")
+    logger.info("Initializing Production RAG Services")
     logger.info("=" * 60)
 
-    settings = get_settings()
-    logger.info(f"LLM model: {settings.google_model}")
-    logger.info(f"Neo4j: {settings.neo4j_uri}")
-    logger.info(f"Qdrant: {settings.qdrant_host}:{settings.qdrant_port}")
+    from backend.retrieval.hybrid import HybridRetriever
+    from backend.generation.synthesizer import ResponseSynthesizer
+    from backend.ingestion.graph_builder import GraphBuilder
 
-    # Ensure image directory exists
-    Path(settings.image_output_dir).mkdir(parents=True, exist_ok=True)
+    # Initialize singletons on app.state for Dependency Injection
+    app.state.retriever = HybridRetriever()
+    app.state.synthesizer = ResponseSynthesizer()
+    app.state.graph = GraphBuilder()
 
     yield
 
-    logger.info("Shutting down RAG system")
+    logger.info("Shutting down RAG services...")
+    app.state.retriever.close()
+    app.state.graph.close()
+    logger.info("Shutdown complete.")
 
 
 # Create the FastAPI app
