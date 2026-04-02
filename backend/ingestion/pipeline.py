@@ -38,6 +38,7 @@ class IngestionPipeline:
         entity_extractor: Optional[EntityExtractor] = None,
         graph_builder: Optional[GraphBuilder] = None,
         vector_store: Optional[VectorStoreManager] = None,
+        saga_manager: Optional[SagaTransactionManager] = None,
     ):
         settings = get_settings()
 
@@ -51,7 +52,7 @@ class IngestionPipeline:
         self.entity_extractor = entity_extractor or EntityExtractor()
         self.graph_builder = graph_builder or GraphBuilder()
         self.vector_store = vector_store or VectorStoreManager()
-        self.saga_manager = SagaTransactionManager()
+        self.saga_manager = saga_manager or SagaTransactionManager()
 
     def setup(self):
         """Initialize database schemas."""

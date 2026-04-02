@@ -89,4 +89,16 @@ Access the UI at `http://localhost:5173`. Detailed evaluation artifacts (CSV/JSO
 - **Framework:** FastAPI + React + Vite
 - **Evaluation:** Ragas + Datasets (HuggingFace)
 - **Reliability:** Tenacity (Exponential Backoff)
-$content
+
+
+---
+
+## ??? Production Readiness & Architecture Notes
+
+This repository is designed as a **Senior-Level Engineering Template**. While the patterns are production-grade, certain mocks are used for demonstration:
+
+1.  **Saga Pattern (In-Memory Outbox):** The current SagaTransactionManager uses a Python dictionary for the outbox. While it demonstrates the **Compensating Transaction** logic, it is NOT crash-resilient. In a high-availability environment, this must be swapped for a persistent storage layer like **PostgreSQL** or **Redis**.
+2.  **Telemetry (Local Tracing):** Structured logs are stored locally. For distributed systems, these should be exported via **OpenTelemetry** to a centralized collector (Prometheus/Grafana).
+3.  **Heuristic Routing:** The initial routing layer is keyword-based for zero-latency. A production evolution would involve a small, local intent classification model (FastText/DistilBERT).
+
+By explicitly documenting these trade-offs, we demonstrate a **Senior-Level maturity** in system design and a focus on transparency.

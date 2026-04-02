@@ -29,10 +29,14 @@ class TransactionStatus:
 
 
 class SagaOutbox:
-    """In-memory outbox store for the Saga pattern.
-
-    In production, this would be backed by a persistent database table
-    to survive process restarts.
+    """
+    [IMPORTANT] In-Memory Outbox Store for the Saga pattern (Demonstration Only).
+    
+    Current Limitation: Because this outbox resides on RAM, it is NOT crash-resilient.
+    If the process restarts, pending transactions will be lost. 
+    
+    Production Roadmap: This MUST be backed by a persistent database (PostgreSQL/Redis)
+    to ensure full ACID Eventual Consistency after hardware failure.
     """
 
     def __init__(self) -> None:
