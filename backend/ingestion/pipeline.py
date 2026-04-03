@@ -233,3 +233,25 @@ class IngestionPipeline:
                     page_number=page.page_number, recipe_name=recipe_name,
                 ))
         return images
+
+
+if __name__ == "__main__":
+    import os
+    import sys
+    from dotenv import load_dotenv
+
+    load_dotenv()
+    logging.basicConfig(level=logging.INFO)
+
+    if len(sys.argv) < 2:
+        print("Usage: python -m backend.ingestion.pipeline <pdf_path_or_directory>")
+        sys.exit(1)
+
+    path = sys.argv[1]
+    pipeline = IngestionPipeline()
+    pipeline.setup()
+
+    if os.path.isdir(path):
+        asyncio.run(pipeline.aingest_directory(path))
+    else:
+        asyncio.run(pipeline.aingest(path))
