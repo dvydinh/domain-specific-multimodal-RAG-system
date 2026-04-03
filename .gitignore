@@ -6,32 +6,29 @@ __pycache__/
 *.egg-info/
 dist/
 build/
-eggs/
-*.egg
-.eggs/
 
 # Virtual environments
 venv/
 .venv/
-env/
 
 # Environment variables
 .env
+.env.local
 
 # IDE
 .vscode/
 .idea/
 *.swp
-*.swo
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Data artifacts
+# Data artifacts (PDFs and images are not tracked)
 data/images/
 data/raw/*.pdf
-*.pdf
+data/saga_outbox.db
+data/.ingestion_checkpoint.json
 
 # Model cache
 models/
@@ -40,36 +37,20 @@ models/
 # Logs
 *.log
 logs/
+tmp/
 
 # Node
 node_modules/
-frontend/node_modules/
 frontend/dist/
 
-# Qdrant snapshots
+# Database snapshots
 qdrant_storage/
-
-# Neo4j
 neo4j_data/
 
 # Jupyter
 .ipynb_checkpoints/
 
-# --- Custom Ignored Files ---
-# Logs and test outputs
-*.log
+# Test artifacts
 *out.txt
 *out*.txt
-test_*.txt
-_test*.txt
-ts.txt
-pytest_*.txt
-
-# Python cache
-__pycache__/
-*.py[cod]
-*$py.class
-
-# Environment variables
-.env
-.env.local
+.pytest_cache/
