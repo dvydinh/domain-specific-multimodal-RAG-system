@@ -20,16 +20,19 @@ from pydantic import BaseModel, Field
 import json
 
 class GraphQueryParams(BaseModel):
+    recipe_name: Optional[str] = Field(default=None, description="Exact or partial name of a specific recipe")
     ingredients_include: list[str] = Field(default=[], description="List of ingredients to include")
     ingredients_exclude: list[str] = Field(default=[], description="List of ingredients to exclude")
     tags_include: list[str] = Field(default=[], description="List of tags to include")
     tags_exclude: list[str] = Field(default=[], description="List of tags to exclude")
+
 logger = logging.getLogger(__name__)
 
 PARAMETER_EXTRACTION_PROMPT = """You are a search parameter extractor for a recipe database.
 Your job is to extract search constraints from a user's query into a structured JSON format.
 
 Schema:
+- recipe_name: if the user mentions a specific recipe name (e.g. "Beef Picadillo", "Chicken Curry"), extract it here.
 - include_ingredients: list of ingredients mentioned as needed (lowercase)
 - exclude_ingredients: list of ingredients to explicitly avoid (lowercase)
 - tags: list of tags like cuisine type (japanese, italian), dietary (vegan, vegetarian, spicy), or meal type.
@@ -37,15 +40,9 @@ Schema:
 Rules:
 1. ONLY output valid JSON. No explanations.
 2. Normalize all values to lowercase English.
-3. Handle synonyms (e.g., 'no meat' -> exclude: ['meat', 'pork', 'beef', 'chicken']).
-4. Extract tags like 'spicy', 'japanese', 'vegan' into the tags list.
-
-Example:
-Query: "Japanese spicy recipes without pork"
-Output: {"include_ingredients": [], "exclude_ingredients": ["pork"], "tags": ["japanese", "spicy"]}
-
-Query: "Beef recipes with onion"
-Output: {"include_ingredients": ["beef", "onion"], "exclude_ingredients": [], "tags": []}"""
+3. If a specific dish is named, put it in recipe_name.
+4. Handle synonyms (e.g., 'no meat' -> exclude: ['meat', 'pork', 'beef', 'chicken']).
+5. Extract tags like 'spicy', 'japanese', 'vegan' into the tags list."""
 
 
 class GraphRetriever:
@@ -123,11 +120,12 @@ class GraphRetriever:
 
         # Pydantic schema enforcement — guarantees output structure
         class SearchParams(BaseModel):
+            recipe_name: Optional[str] = None
             include_ingredients: list[str] = []
             exclude_ingredients: list[str] = []
             tags: list[str] = []
 
-        _SAFE_DEFAULT = {"include_ingredients": [], "exclude_ingredients": [], "tags": []}
+        _SAFE_DEFAULT = {"recipe_name": None, "include_ingredients": [], "exclude_ingredients": [], "tags": []}
 
         messages = [
             SystemMessage(content=PARAMETER_EXTRACTION_PROMPT),
@@ -155,13 +153,19 @@ class GraphRetriever:
 
     async def _execute_parameterized_search(self, params: dict) -> list[dict]:
         """Execute a safe, pre-defined Cypher template using extracted parameters."""
+        recipe_name = params.get("recipe_name")
         include_ings = params.get("include_ingredients", [])
         exclude_ings = params.get("exclude_ingredients", [])
         tags = params.get("tags", [])
 
-        # The core "Safe" query template
+        # Enhanced query template with Recipe Name search
         cypher = """
         MATCH (r:Recipe)
+        
+        // Filter by Recipe Name (if provided)
+        WITH r
+        WHERE $recipe_name IS NULL 
+           OR toLower(r.name) CONTAINS toLower($recipe_name)
         
         // Filter by included ingredients
         WITH r
@@ -196,6 +200,7 @@ class GraphRetriever:
                 return session.execute_read(
                     lambda tx: tx.run(
                         cypher, 
+                        recipe_name=recipe_name,
                         include_ings=include_ings,
                         exclude_ings=exclude_ings,
                         tags=tags

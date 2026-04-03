@@ -1,4 +1,4 @@
-# Literature Review — Domain-Specific Multimodal RAG
+# Literature Review - Domain-Specific Multimodal RAG
 
 > Research notes compiled during the design phase. Every citation below
 > links to a verifiable academic paper or official documentation.

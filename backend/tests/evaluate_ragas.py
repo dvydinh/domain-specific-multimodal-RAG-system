@@ -78,9 +78,22 @@ async def _evaluate_pipeline(
         # Build response with production synthesizer (includes internal retries)
         response = await synthesizer.asynthesize(query, results)
         
+        # Merge contexts from Vector (text) and Graph (structured)
+        contexts = [res.get("text", "") for res in results.get("text_results", [])]
+        
+        for g_res in results.get("graph_results", []):
+            # Format graph result as a context-rich string for RAGAS
+            g_text = f"Recipe: {g_res.get('name')} (Cuisine: {g_res.get('cuisine')}). "
+            if g_res.get("ingredients"):
+                ings = ", ".join([f"{i['quantity']} {i['unit']} {i['name']}" for i in g_res.get("ingredients", [])])
+                g_text += f"Ingredients: {ings}. "
+            if g_res.get("tags"):
+                g_text += f"Tags: {', '.join(g_res.get('tags'))}."
+            contexts.append(g_text)
+
         results_pkg["question"].append(query)
         results_pkg["answer"].append(response.response)
-        results_pkg["contexts"].append([res.get("text", "") for res in results.get("text_results", [])])
+        results_pkg["contexts"].append(contexts)
         results_pkg["ground_truth"].append(item["ground_truth"])
 
     return results_pkg

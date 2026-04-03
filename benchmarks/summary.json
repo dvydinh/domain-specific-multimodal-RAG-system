@@ -1,14 +1,14 @@
 {
     "baseline": {
-        "faithfulness": 0.9642857142857143,
-        "answer_relevancy": 0.14285714285688036
+        "faithfulness": 0.8571428571428571,
+        "answer_relevancy": 0.28571428571373153
     },
     "hybrid": {
-        "faithfulness": 0.8571428571428571,
-        "answer_relevancy": 0.2795233955941691
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.28456934282070445
     },
     "improvements": {
-        "faithfulness_pct": -11.111111111111116,
-        "answer_relevancy_pct": 95.66637691627791
+        "faithfulness_pct": 16.666666666666675,
+        "answer_relevancy_pct": -0.40073001256025753
     }
 }

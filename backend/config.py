@@ -46,8 +46,8 @@ class Settings(BaseSettings):
     image_output_dir: str = Field(default="data/images")
 
     # --- Rate Limiting (Google AI Free Tier: 15 RPM) ---
-    api_cooldown_seconds: int = Field(default=75)
-    entity_batch_size: int = Field(default=3)
+    api_cooldown_seconds: int = Field(default=5)
+    entity_batch_size: int = Field(default=5)
 
     # --- Evaluation ---
     eval_test_size: int = Field(default=50)

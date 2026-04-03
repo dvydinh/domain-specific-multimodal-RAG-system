@@ -1,14 +1,14 @@
-# 🍓 Hybrid Multimodal RAG — Recipe Knowledge Graph + Vector Search
+# Hybrid Multimodal RAG - Recipe Knowledge Graph + Vector Search
 
-[![System Design: Interview Ready](https://img.shields.io/badge/System_Design-Interview_Ready-blue.svg)](#system-architecture)
-[![Evaluation: RAGAS Benchmarked](https://img.shields.io/badge/Evaluation-RAGAS_Benchmarked-success.svg)](#benchmark-analysis)
-[![Streaming: SSE Enabled](https://img.shields.io/badge/Streaming-SSE_Enabled-blueviolet.svg)](#sse-streaming)
+[System Design: Interview Ready](https://img.shields.io/badge/System_Design-Interview_Ready-blue.svg)
+[Evaluation: RAGAS Benchmarked](https://img.shields.io/badge/Evaluation-RAGAS_Benchmarked-success.svg)
+[Streaming: SSE Enabled](https://img.shields.io/badge/Streaming-SSE_Enabled-blueviolet.svg)
 
 A Hybrid RAG system combining **Neo4j Knowledge Graphs** with **Qdrant Vector Search**, featuring a true **dual-encoder multimodal architecture** (BGE-M3 for text, OpenCLIP ViT-B/32 for images), SSE streaming, and crash-resilient distributed transactions.
 
 ---
 
-## 🏗️ System Architecture
+## System Architecture
 
 **Graph-First Filtering** eliminates hallucinations before LLM synthesis begins.
 
@@ -39,7 +39,7 @@ graph TD
 
 ---
 
-## 📈 Benchmark Analysis
+## Benchmark Analysis
 
 Evaluated using **RAGAS** framework on a curated adversarial dataset (Beef & Chicken recipes). Evaluator LLM: Gemini 2.0 Flash.
 
@@ -56,7 +56,7 @@ Evaluated using **RAGAS** framework on a curated adversarial dataset (Beef & Chi
 
 ---
 
-## 🎨 True Multimodal Architecture
+## True Multimodal Architecture
 
 This system implements a **genuine dual-encoder multimodal pipeline**, NOT text-to-text metadata search:
 
@@ -76,7 +76,7 @@ This is true multimodal retrieval — images are embedded **directly** through C
 
 ---
 
-## 🛡️ System Resiliency
+## System Resiliency
 
 ### SQLite Saga Outbox
 
@@ -100,7 +100,7 @@ If ingestion crashes at page 450 of a 500-page PDF, the system resumes from page
 
 ---
 
-## 🌊 SSE Streaming
+## SSE Streaming
 
 The `/api/query/stream` endpoint delivers LLM tokens in real-time via Server-Sent Events:
 
@@ -115,7 +115,7 @@ Retrieval runs first (~1s), metadata is sent immediately, then tokens stream as 
 
 ---
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
 - Docker & Docker Compose
@@ -136,7 +136,7 @@ Access the UI at `http://localhost:5173`. Evaluation artifacts are in `/benchmar
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Component | Technology |
 |:---|:---|
@@ -152,7 +152,7 @@ Access the UI at `http://localhost:5173`. Evaluation artifacts are in `/benchmar
 
 ---
 
-## ⚖️ Architecture Trade-offs & Limitations
+## Architecture Trade-offs and Limitations
 
 | Component | Current State | Production Evolution |
 |:---|:---|:---|
@@ -164,7 +164,7 @@ Access the UI at `http://localhost:5173`. Evaluation artifacts are in `/benchmar
 
 ---
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 ├── backend/
