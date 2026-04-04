@@ -278,25 +278,31 @@ async def evaluate_pipeline(
         logger.info(f"[{label}] Question {i + 1}/{len(questions)}: {query[:60]}...")
 
         try:
-            # --- Retrieval ---
-            if hasattr(retriever, 'aretrieve'):
-                results = await retriever.aretrieve(query, top_k=6, include_images=False)
+            # --- Retrieval & Synthesis ---
+            if retriever is None:
+                # Raw LLM / No RAG Baseline
+                prompt = f"Please answer the following question accurately: {query}"
+                answer = _call_llm(eval_model, prompt)
+                contexts = []
             else:
-                results = await retriever.aretrieve_all(query, top_k_text=6, include_images=False)
+                # Standard RAG Pipeline
+                if hasattr(retriever, 'aretrieve'):
+                    results = await retriever.aretrieve(query, top_k=6, include_images=False)
+                else:
+                    results = await retriever.aretrieve_all(query, top_k_text=6, include_images=False)
 
-            # --- Synthesis ---
-            response = await synthesizer.asynthesize(query, results)
-            answer = response.response
+                response = await synthesizer.asynthesize(query, results)
+                answer = response.response
 
-            # --- Collect contexts ---
-            contexts = [res.get("text", "") for res in results.get("text_results", [])]
-            for g_res in results.get("graph_results", []):
-                g_text = f"Recipe: {g_res.get('name')} (Cuisine: {g_res.get('cuisine', 'N/A')}). "
-                contexts.append(g_text)
-            contexts = [c for c in contexts if c.strip()]
+                # Collect contexts
+                contexts = [res.get("text", "") for res in results.get("text_results", [])]
+                for g_res in results.get("graph_results", []):
+                    g_text = f"Recipe: {g_res.get('name')} (Cuisine: {g_res.get('cuisine', 'N/A')}). "
+                    contexts.append(g_text)
+                contexts = [c for c in contexts if c.strip()]
 
-            if not contexts:
-                contexts = ["No relevant context found."]
+                if not contexts:
+                    contexts = ["No relevant context found."]
 
             # --- Score (synchronous LLM calls with rate limiting) ---
             faith = score_faithfulness(eval_model, answer, contexts)
