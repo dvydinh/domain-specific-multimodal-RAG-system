@@ -1,12 +1,11 @@
 """
-Vector store manager for Qdrant.
+Vector Store Manager for Qdrant.
 
-Manages two collections:
-  - recipe_text: BGE-M3 text embeddings (dim=1024)
-  - recipe_images: CLIP image embeddings (dim=512)
+Handles embedding and storage of text chunks (via fastembed/BGE)
+and images (via OpenCLIP ViT-B/32) into separate Qdrant collections.
 
-Each vector carries a payload with neo4j_recipe_id for cross-referencing
-with the knowledge graph.
+Supports filtered search by recipe IDs from the graph retriever,
+enabling graph-constrained vector retrieval.
 """
 
 import logging
@@ -15,7 +14,7 @@ from pathlib import Path
 
 from qdrant_client import QdrantClient
 from qdrant_client.http import models as qmodels
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 from backend.config import get_settings
 from backend.models import ChunkMetadata, ImageMetadata
@@ -23,17 +22,19 @@ from backend.models import ChunkMetadata, ImageMetadata
 logger = logging.getLogger(__name__)
 
 
+# Dimension constants — must match the embedding models used
+TEXT_DIM = 384    # BAAI/bge-small-en-v1.5
+IMAGE_DIM = 512   # OpenCLIP ViT-B/32
+
+
 class VectorStoreManager:
     """
     Manages Qdrant vector collections for text and image embeddings.
 
-    Handles collection creation, embedding generation, and vector upsert
-    with metadata payloads linked to Neo4j recipe IDs.
+    Text embeddings use fastembed (BAAI/bge-small-en-v1.5, 384-dim).
+    Image embeddings use OpenCLIP ViT-B/32 (512-dim).
+    Both collections carry neo4j_recipe_id payloads for graph-vector linking.
     """
-
-    # Embedding dimensions
-    TEXT_DIM = 1024   # BGE-M3
-    IMAGE_DIM = 512   # CLIP ViT-B/32
 
     def __init__(
         self,
@@ -48,8 +49,11 @@ class VectorStoreManager:
         self.text_collection = settings.qdrant_text_collection
         self.image_collection = settings.qdrant_image_collection
 
-        # Lazy-loaded embedding models
-        self._text_model: Optional[SentenceTransformer] = None
+        # Initialize text embedding model eagerly
+        logger.info(f"Initializing text embedding: {settings.text_embedding_model}")
+        self._dense_model = TextEmbedding(model_name=settings.text_embedding_model)
+
+        # CLIP model loaded lazily (only needed for image queries)
         self._clip_model = None
         self._clip_preprocess = None
         self._clip_tokenizer = None
@@ -63,40 +67,34 @@ class VectorStoreManager:
     # ================================================================
 
     def create_collections(self):
-        """Create Qdrant collections with HNSW configuration if they don't exist."""
-        hnsw_config = qmodels.HnswConfigDiff(
-            m=16,
-            ef_construct=100,
-        )
-
-        # Text collection
+        """Initialize Qdrant collections if they don't exist."""
+        # Text collection (dense vectors only)
         if not self._collection_exists(self.text_collection):
             self.client.create_collection(
                 collection_name=self.text_collection,
-                vectors_config=qmodels.VectorParams(
-                    size=self.TEXT_DIM,
-                    distance=qmodels.Distance.COSINE,
-                    hnsw_config=hnsw_config,
-                ),
+                vectors_config={
+                    "dense": qmodels.VectorParams(
+                        size=TEXT_DIM,
+                        distance=qmodels.Distance.COSINE,
+                    )
+                },
                 on_disk_payload=True,
             )
-            logger.info(f"Created collection '{self.text_collection}' (dim={self.TEXT_DIM})")
+            logger.info(f"Created collection '{self.text_collection}' (dim={TEXT_DIM})")
 
-        # Image collection
+        # Image collection (CLIP vectors)
         if not self._collection_exists(self.image_collection):
             self.client.create_collection(
                 collection_name=self.image_collection,
                 vectors_config=qmodels.VectorParams(
-                    size=self.IMAGE_DIM,
+                    size=IMAGE_DIM,
                     distance=qmodels.Distance.COSINE,
-                    hnsw_config=hnsw_config,
                 ),
                 on_disk_payload=True,
             )
-            logger.info(f"Created collection '{self.image_collection}' (dim={self.IMAGE_DIM})")
+            logger.info(f"Created collection '{self.image_collection}' (dim={IMAGE_DIM})")
 
     def _collection_exists(self, name: str) -> bool:
-        """Check if a collection already exists."""
         try:
             self.client.get_collection(name)
             return True
@@ -104,24 +102,18 @@ class VectorStoreManager:
             return False
 
     # ================================================================
-    # Embedding Models (lazy loading)
+    # Embedding Models
     # ================================================================
 
-    def _get_text_model(self) -> SentenceTransformer:
-        """Lazily load the BGE-M3 text embedding model."""
-        if self._text_model is None:
-            settings = get_settings()
-            logger.info(f"Loading text embedding model: {settings.text_embedding_model}")
-            self._text_model = SentenceTransformer(settings.text_embedding_model)
-        return self._text_model
+    @property
+    def dense_model(self) -> TextEmbedding:
+        return self._dense_model
 
     def _get_clip_model(self) -> tuple:
-        """Lazily load the CLIP model for image embeddings."""
+        """Lazy-load OpenCLIP model (only needed for image operations)."""
         if self._clip_model is None:
             import open_clip
             settings = get_settings()
-
-            logger.info(f"Loading CLIP model: {settings.clip_model}")
             model, _, preprocess = open_clip.create_model_and_transforms(
                 settings.clip_model,
                 pretrained=settings.clip_pretrained,
@@ -129,11 +121,11 @@ class VectorStoreManager:
             self._clip_model = model
             self._clip_preprocess = preprocess
             self._clip_tokenizer = open_clip.get_tokenizer(settings.clip_model)
-
+            logger.info(f"Loaded CLIP model: {settings.clip_model}")
         return self._clip_model, self._clip_preprocess, self._clip_tokenizer
 
     # ================================================================
-    # Text Embedding & Upsert
+    # Ingestion: Text Chunks
     # ================================================================
 
     def embed_and_store_chunks(
@@ -142,37 +134,39 @@ class VectorStoreManager:
         recipe_id_map: dict[str, str],
     ) -> int:
         """
-        Embed text chunks and store them in Qdrant.
+        Embed text chunks via BGE and upsert to Qdrant.
 
         Args:
             chunks: Text chunks with metadata.
-            recipe_id_map: Mapping of recipe_name -> neo4j_recipe_id.
+            recipe_id_map: Mapping of recipe name → Neo4j UUID.
 
         Returns:
-            Number of vectors stored.
+            Number of points upserted.
         """
         if not chunks:
             return 0
 
-        model = self._get_text_model()
-        texts = [chunk.text for chunk in chunks]
+        # Filter out empty/whitespace-only chunks
+        valid_chunks = [c for c in chunks if c.text and c.text.strip()]
+        if not valid_chunks:
+            logger.warning("No non-empty chunks to embed. Skipping batch.")
+            return 0
 
-        logger.info(f"Embedding {len(texts)} text chunks...")
-        embeddings = model.encode(texts, show_progress_bar=True, normalize_embeddings=True)
+        texts = [c.text.strip() for c in valid_chunks]
+
+        # Embed using fastembed
+        dense_vecs = list(self.dense_model.embed(texts))
 
         points = []
-        for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
-            # Match chunk to recipe ID via recipe name
-            recipe_id = None
-            if chunk.recipe_name:
-                recipe_id = recipe_id_map.get(chunk.recipe_name)
+        for chunk, d_vec in zip(valid_chunks, dense_vecs):
+            recipe_id = recipe_id_map.get(chunk.recipe_name, "") if chunk.recipe_name else ""
 
             point = qmodels.PointStruct(
-                id=i,
-                vector=embedding.tolist(),
+                id=abs(hash(f"{chunk.source_pdf}_{chunk.page_number}_{chunk.chunk_index}")) % (10**15),
+                vector={"dense": d_vec.tolist()},
                 payload={
                     "text": chunk.text,
-                    "neo4j_recipe_id": recipe_id or "",
+                    "neo4j_recipe_id": recipe_id,
                     "recipe_name": chunk.recipe_name or "",
                     "source_pdf": chunk.source_pdf,
                     "page_number": chunk.page_number,
@@ -182,17 +176,12 @@ class VectorStoreManager:
             )
             points.append(point)
 
-        # Batch upsert (Qdrant handles batching internally)
-        self.client.upsert(
-            collection_name=self.text_collection,
-            points=points,
-        )
-
-        logger.info(f"Stored {len(points)} text vectors in '{self.text_collection}'")
+        self.client.upsert(collection_name=self.text_collection, points=points)
+        logger.info(f"Upserted {len(points)} text vectors to '{self.text_collection}'")
         return len(points)
 
     # ================================================================
-    # Image Embedding & Upsert
+    # Ingestion: Images
     # ================================================================
 
     def embed_and_store_images(
@@ -200,16 +189,7 @@ class VectorStoreManager:
         image_metadata: list[ImageMetadata],
         recipe_id_map: dict[str, str],
     ) -> int:
-        """
-        Embed images using CLIP and store them in Qdrant.
-
-        Args:
-            image_metadata: Image metadata with file paths.
-            recipe_id_map: Mapping of recipe_name -> neo4j_recipe_id.
-
-        Returns:
-            Number of image vectors stored.
-        """
+        """Embed images via CLIP and upsert to Qdrant."""
         if not image_metadata:
             return 0
 
@@ -219,10 +199,9 @@ class VectorStoreManager:
         model, preprocess, _ = self._get_clip_model()
         points = []
 
-        for idx, img_meta in enumerate(image_metadata):
+        for img_meta in image_metadata:
             img_path = Path(img_meta.image_path)
             if not img_path.exists():
-                logger.warning(f"Image not found: {img_path}")
                 continue
 
             try:
@@ -233,12 +212,10 @@ class VectorStoreManager:
                     embedding = model.encode_image(image_tensor)
                     embedding = embedding / embedding.norm(dim=-1, keepdim=True)
 
-                recipe_id = ""
-                if img_meta.recipe_name:
-                    recipe_id = recipe_id_map.get(img_meta.recipe_name, "")
+                recipe_id = recipe_id_map.get(img_meta.recipe_name, "") if img_meta.recipe_name else ""
 
                 point = qmodels.PointStruct(
-                    id=idx,
+                    id=abs(hash(str(img_path))) % (10**15),
                     vector=embedding.squeeze().tolist(),
                     payload={
                         "neo4j_recipe_id": recipe_id,
@@ -249,17 +226,12 @@ class VectorStoreManager:
                     },
                 )
                 points.append(point)
-
             except Exception as e:
-                logger.error(f"Failed to embed image {img_path}: {e}")
+                logger.error(f"Failed to process image {img_path}: {e}")
 
         if points:
-            self.client.upsert(
-                collection_name=self.image_collection,
-                points=points,
-            )
-
-        logger.info(f"Stored {len(points)} image vectors in '{self.image_collection}'")
+            self.client.upsert(collection_name=self.image_collection, points=points)
+            logger.info(f"Upserted {len(points)} image vectors to '{self.image_collection}'")
         return len(points)
 
     # ================================================================
@@ -277,14 +249,13 @@ class VectorStoreManager:
 
         Args:
             query: Natural language query.
-            top_k: Number of results.
-            recipe_ids: Optional list of neo4j_recipe_ids to filter by.
+            top_k: Number of results to return.
+            recipe_ids: Optional list of Neo4j recipe IDs to filter by.
 
         Returns:
-            List of search results with text and metadata.
+            List of result dicts with score, text, and metadata.
         """
-        model = self._get_text_model()
-        query_vector = model.encode(query, normalize_embeddings=True).tolist()
+        query_dense = list(self.dense_model.embed([query]))[0].tolist()
 
         search_filter = None
         if recipe_ids:
@@ -297,9 +268,10 @@ class VectorStoreManager:
                 ]
             )
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.text_collection,
-            query_vector=query_vector,
+            query=query_dense,
+            using="dense",
             query_filter=search_filter,
             limit=top_k,
         )
@@ -312,9 +284,8 @@ class VectorStoreManager:
                 "neo4j_recipe_id": hit.payload.get("neo4j_recipe_id", ""),
                 "source_pdf": hit.payload.get("source_pdf", ""),
                 "page_number": hit.payload.get("page_number", 0),
-                "bbox": hit.payload.get("bbox", None),
             }
-            for hit in results
+            for hit in results.points
         ]
 
     def search_images(
@@ -323,19 +294,8 @@ class VectorStoreManager:
         top_k: int = 3,
         recipe_ids: Optional[list[str]] = None,
     ) -> list[dict]:
-        """
-        Search for recipe images using text-to-image CLIP similarity.
-
-        Args:
-            query: Natural language description.
-            top_k: Number of results.
-            recipe_ids: Optional filter by recipe IDs.
-
-        Returns:
-            List of image results with paths and metadata.
-        """
+        """Text-to-image cross-modal search via CLIP."""
         import torch
-
         model, _, tokenizer = self._get_clip_model()
         text_tokens = tokenizer([query])
 
@@ -356,9 +316,9 @@ class VectorStoreManager:
                 ]
             )
 
-        results = self.client.search(
+        results = self.client.query_points(
             collection_name=self.image_collection,
-            query_vector=query_vector,
+            query=query_vector,
             query_filter=search_filter,
             limit=top_k,
         )
@@ -370,5 +330,5 @@ class VectorStoreManager:
                 "recipe_name": hit.payload.get("recipe_name", ""),
                 "neo4j_recipe_id": hit.payload.get("neo4j_recipe_id", ""),
             }
-            for hit in results
+            for hit in results.points
         ]

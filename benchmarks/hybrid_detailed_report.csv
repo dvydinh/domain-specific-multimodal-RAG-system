@@ -1,22 +1,36 @@
-question,contexts,answer,ground_truth,faithfulness,answer_relevancy
-What are the main ingredients for Beef Picadillo?,"['Recipe: Beef Picadillo (Cuisine: Latin American). Ingredients: not specified not specified beef, 1 lb 4½ oz weight green bell peppers, fresh, ¼″ diced, 1 lb 4½ oz weight onions, fresh, peeled, ¼″ diced, not specified not specified rice, not specified not specified tomatoes, not specified not specified ground beef. Tags: lunch, dinner, Beef, Main Course, caribbean, main dish, stew.']","The main ingredients for Beef Picadillo are [1]:
+question,answer,faithfulness,answer_relevancy,context_count,ground_truth
+What are the main ingredients for Beef Picadillo?,"The main ingredients for Beef Picadillo include:
 
-*   Beef
-*   Green bell peppers (fresh, ¼″ diced)
-*   Onions (fresh, peeled, ¼″ diced)
-*   Rice
-*   Tomatoes
-*   Ground beef","The ingredients for Beef Picadillo include 500g ground beef, 2 cubed potatoes, 1 diced onion, 2 garlic cloves, 1/2 cup raisins, 1/2 cup olives, 1 tsp cumin, salt, and pepper.",1.0,0.9919853997469726
-How long should the beef simmer in the Picadillo recipe?,"['Recipe: Beef Picadillo (Cuisine: Latin American). '
- 'Recipe: picadillo and rice (Cuisine: Latin American). ']","Based on the provided documents, I cannot find this information.",The beef should be simmered for 20-30 minutes until the potatoes are tender and the flavors have melded.,1.0,0.0
-What spices are used in the Chicken Curry recipe?,['Recipe: Chicken Curry (Cuisine: Indian). '],"Based on the provided documents, I cannot find this information.","The spices required are 2 tbsp curry powder, 1 tsp turmeric, 1 tsp cumin, along with fresh ginger and garlic.",1.0,0.0
-Is the Chicken Curry recipe dairy-free?,"['CHICKEN CURRY\n\nOpt for brown rice instead of\nwhite rice for a boost in fibre\n\nand important minerals!\n\nAdd your favourite frozen\n\nveggies for a quick and easy\n\nway to bulk up the meal.\n\nUse leftovers by substituting\n\nchicken with leftover protein\n\nfrom other meals.\n\nIngredients\n\nDirections'
- '1. Heat olive oil in a pot over medium heat.\n\n2. Add onion and saute for 4-5 minutes, until\nsoftened. Add garlic and saute another 30\nseconds.\n\n3. Add chicken and cook for 7-8 minutes,\nstirring occasionally, until cooked through.\nStir in curry powder, diced tomatoes, salt,\npepper and chicken broth.\n\n4. Bring to a low simmer and cook for 2-3\nminutes, until slightly thickened.\n\n5. Turn off the heat and stir in the yogurt\nuntil just combined. Serve hot with rice.\n\nTips'
- 'from other meals.\n\nIngredients\n\nDirections\n\n2 tsp olive oil\n1 white onion, chopped\n2 cloves garlic, minced\n200g raw chicken breast, diced\n1 tbsp curry powder (to taste)\n400g canned diced tomatoes,\ndrained\n⅓ cup salt reduced chicken\nbroth\n½ tsp salt\n¼ tsp black pepper\n¾ cup plain or Greek yogurt\n3 cups cooked rice\nChopped parsley (optional)\n\nServes: 4\nReady in: 20 mins\nCost per serve: $2.55\n\n1. Heat olive oil in a pot over medium heat.']","Based on the provided documents, the Chicken Curry recipe is not dairy-free, as it requires ¾ cup of plain or Greek yogurt [3], which is stirred into the dish at the end of the cooking process [2].","Yes, the recipe uses coconut milk instead of dairy products, making it a dairy-free dish.",1.0,0.9999999999979584
-How much nutmeg is required for the Beef Picadillo?,"['from other meals.\n\nIngredients\n\nDirections\n\n2 tsp olive oil\n1 white onion, chopped\n2 cloves garlic, minced\n200g raw chicken breast, diced\n1 tbsp curry powder (to taste)\n400g canned diced tomatoes,\ndrained\n⅓ cup salt reduced chicken\nbroth\n½ tsp salt\n¼ tsp black pepper\n¾ cup plain or Greek yogurt\n3 cups cooked rice\nChopped parsley (optional)\n\nServes: 4\nReady in: 20 mins\nCost per serve: $2.55\n\n1. Heat olive oil in a pot over medium heat.'
- 'Tips\n\nRecipe adapted in Feb 2023 from: familyfoodonthetable.com\n\nResource developed by Tricia Chng'
- '1. Heat olive oil in a pot over medium heat.\n\n2. Add onion and saute for 4-5 minutes, until\nsoftened. Add garlic and saute another 30\nseconds.\n\n3. Add chicken and cook for 7-8 minutes,\nstirring occasionally, until cooked through.\nStir in curry powder, diced tomatoes, salt,\npepper and chicken broth.\n\n4. Bring to a low simmer and cook for 2-3\nminutes, until slightly thickened.\n\n5. Turn off the heat and stir in the yogurt\nuntil just combined. Serve hot with rice.\n\nTips']","Based on the provided documents, I cannot find this information.","Based on the provided documents, I cannot find this information.",1.0,0.0
-What are the steps to prepare Veggie Lasagna?,"['from other meals.\n\nIngredients\n\nDirections\n\n2 tsp olive oil\n1 white onion, chopped\n2 cloves garlic, minced\n200g raw chicken breast, diced\n1 tbsp curry powder (to taste)\n400g canned diced tomatoes,\ndrained\n⅓ cup salt reduced chicken\nbroth\n½ tsp salt\n¼ tsp black pepper\n¾ cup plain or Greek yogurt\n3 cups cooked rice\nChopped parsley (optional)\n\nServes: 4\nReady in: 20 mins\nCost per serve: $2.55\n\n1. Heat olive oil in a pot over medium heat.'
- '1. Heat olive oil in a pot over medium heat.\n\n2. Add onion and saute for 4-5 minutes, until\nsoftened. Add garlic and saute another 30\nseconds.\n\n3. Add chicken and cook for 7-8 minutes,\nstirring occasionally, until cooked through.\nStir in curry powder, diced tomatoes, salt,\npepper and chicken broth.\n\n4. Bring to a low simmer and cook for 2-3\nminutes, until slightly thickened.\n\n5. Turn off the heat and stir in the yogurt\nuntil just combined. Serve hot with rice.\n\nTips'
- 'Tips\n\nRecipe adapted in Feb 2023 from: familyfoodonthetable.com\n\nResource developed by Tricia Chng']","Based on the provided documents, I cannot find this information.","Based on the provided documents, I cannot find this information.",1.0,0.0
-Does the Chicken Curry use ricotta cheese?,['Recipe: Chicken Curry (Cuisine: Indian). '],"Based on the provided documents, I cannot find this information [1].","Based on the provided documents, I cannot find this information.",1.0,0.0
+*   **Ground beef** [2]
+*   **Tomatoes** [2]
+*   **Onions, fresh, peeled, ¼″ diced**: 1 lb 4½ oz (1 qt 1⅛ cup) for 25 servings or 2 lb 9 oz (2 qt 2¼ c",0.8823529411764706,0.6253426671028137,7,"The ingredients for Beef Picadillo include ground beef, cubed potatoes, diced onion, garlic cloves, raisins, olives, cumin, salt, and pepper."
+How long should the beef simmer in the Picadillo recipe?,"Based on the provided documents, I cannot find this information.",1.0,0.4443158507347107,7,The beef should be simmered for 20-30 minutes until the potatoes are tender and the flavors have melded.
+What spices are used in the Chicken Curry recipe?,"The spices used in the Chicken Curry recipe are curry powder [3], [4], salt [3], [4], and black pepper [3], [4].",1.0,0.6421826481819153,7,"The spices required are curry powder, turmeric, cumin, along with fresh ginger and garlic."
+Is the Chicken Curry recipe dairy-free?,"No, the Chicken Curry recipe is not dairy-free as it includes ¾ cup of plain or Greek yogurt [3].",1.0,0.6732950806617737,7,"The Chicken Curry recipe uses yogurt, which is a dairy product, so it is not dairy-free."
+What cuisine does Beef Picadillo belong to?,Beef Picadillo belongs to International cuisine [1] and is a popular dish in the Caribbean and South American countries [2].,1.0,0.5687849521636963,7,Beef Picadillo is a Latin American or Caribbean dish.
+What are the steps to cook Chicken Curry?,"**Recipe Name**
+Chicken Curry [1], [2], [4]
+
+**Ingredients**
+- 2 tsp olive oil [4]
+- 1 white onion, chopped [4]
+- 2 cloves garlic, minced [4]
+- 200g raw chicken breast, diced [4]
+- 1 tbsp curry powder",1.0,0.6515546441078186,7,"Heat olive oil, saute onion and garlic, add chicken and cook until done, stir in curry powder, tomatoes, salt, pepper and broth, simmer until thickened, then stir in yogurt and serve with rice."
+Which recipes contain ground beef as an ingredient?,"Based on the provided documents, the recipe for Beef Picadillo contains ground beef [1], [3].",1.0,0.6413838863372803,6,Beef Picadillo contains ground beef as an ingredient.
+List recipes that do not contain chicken.,"Based on the provided documents, the following recipe does not contain chicken:
+
+* **Beef Picadillo** [1], [2]",1.0,0.7039309740066528,7,Beef Picadillo does not contain chicken.
+What vegetables are used in Beef Picadillo?,"The vegetables used in Beef Picadillo include:
+
+*   Onions [3]
+*   Green bell peppers [3] (frozen bell peppers may be used as a substitute [6])
+*   Garlic [7]
+*   Tomatoes [2, 7]
+*   Cilantro [5]",1.0,0.6120004057884216,7,"Beef Picadillo uses potatoes, onion, garlic, green bell peppers, and tomatoes."
+How many servings does the Chicken Curry recipe make?,The Chicken Curry recipe serves 4 [3].,1.0,0.6553213000297546,7,The Chicken Curry recipe serves 4.
+What is the cost per serving for Chicken Curry?,The cost per serving for Chicken Curry is $2.55 [2].,1.0,0.6265636682510376,7,The cost per serve for Chicken Curry is $2.55.
+How much nutmeg is required for the Beef Picadillo?,"Based on the provided documents, I cannot find this information.",1.0,0.4294171631336212,7,"Based on the provided documents, I cannot find this information."
+What are the steps to prepare Veggie Lasagna?,"Based on the provided documents, I cannot find this information.",1.0,0.4069671630859375,6,"Based on the provided documents, I cannot find this information."
+Does the Chicken Curry use ricotta cheese?,"Based on the provided documents, I cannot find this information.",1.0,0.3710915446281433,7,"Based on the provided documents, I cannot find this information."
+What is the recommended cooking temperature for Beef Picadillo?,"The recommended cooking temperature for Beef Picadillo is to heat it to 165 °F or higher for at least 15 seconds [7]. Additionally, it should be held at 140 °F or higher [4].",1.0,0.6184486746788025,7,"Based on the provided documents, I cannot find this information."

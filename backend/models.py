@@ -51,6 +51,7 @@ class ChunkMetadata(BaseModel):
     page_number: int
     chunk_index: int
     bbox: Optional[tuple[float, float, float, float]] = Field(None, description="Bounding box [x0, y0, x1, y1]")
+    start_index: int = Field(default=0, description="Character offset of this chunk in the source page text")
     recipe_name: Optional[str] = None
     neo4j_recipe_id: Optional[str] = None
 

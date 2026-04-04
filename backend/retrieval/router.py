@@ -1,13 +1,13 @@
 """
-LLM-based query router with Heuristic optimization.
+Query router with heuristic + LLM classification.
 
 Classifies incoming queries into retrieval strategies:
   - GRAPH_ONLY:  Hard constraints present (specific ingredients, exclusions, tags)
   - VECTOR_ONLY: Pure semantic/similarity search (cooking techniques, general questions)
   - HYBRID:      Both hard constraints and semantic content needed
 
-The router uses a high-performance heuristic layer (Regex/Keywords) before 
-falling back to an Adaptive LLM Classifier.
+Uses a fast keyword heuristic layer first, falling back to LLM
+classification for ambiguous queries.
 """
 
 import logging
@@ -15,9 +15,10 @@ from enum import Enum
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from backend.config import get_settings
+from backend.utils.llm_factory import LLMFactory
+from backend.utils.json_parser import extract_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -42,16 +43,20 @@ Respond with EXACTLY one word: GRAPH_ONLY, VECTOR_ONLY, or HYBRID"""
 
 class QueryRouter:
     """
-    Routes queries to the appropriate retrieval strategy with Heuristic bypass.
+    Routes queries to the appropriate retrieval strategy.
+
+    Pipeline:
+      1. Keyword heuristic (deterministic, <1ms)
+      2. LLM classification (fallback for ambiguous queries)
+      3. Default to HYBRID if all else fails
     """
 
-    def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
+    def __init__(self, model: Optional[str] = None):
         settings = get_settings()
-        self.llm = ChatGoogleGenerativeAI(
-            api_key=api_key or settings.google_api_key,
-            model=model or settings.google_model,
+        self.llm = LLMFactory.get_llm(
+            model_name=model or settings.google_model,
             temperature=0.0,
-            max_output_tokens=20,
+            max_tokens=20,
         )
 
     @retry(
@@ -60,16 +65,13 @@ class QueryRouter:
         reraise=True
     )
     async def aroute(self, query: str) -> QueryType:
-        """
-        Classify a query into a retrieval strategy.
-        Uses a high-performance heuristic layer before falling back to LLM.
-        """
-        # Step 1: High-performance Heuristic Layer (Deterministic)
+        """Classify a query into a retrieval strategy."""
+        # Step 1: Fast heuristic layer
         heuristic_result = self._heuristic_classify(query)
         if heuristic_result:
             return heuristic_result
 
-        # Step 2: Adaptive LLM Routing (Fallback)
+        # Step 2: LLM classification (fallback)
         messages = [
             SystemMessage(content=ROUTER_SYSTEM_PROMPT),
             HumanMessage(content=f"Classify this query: {query}"),
@@ -77,7 +79,12 @@ class QueryRouter:
 
         try:
             response = await self.llm.ainvoke(messages)
-            classification = response.content.strip().upper()
+            raw_content = extract_text_content(response.content)
+            if not raw_content:
+                logger.warning("Router received empty LLM response, defaulting to HYBRID.")
+                return QueryType.HYBRID
+
+            classification = raw_content.strip().upper()
 
             if "GRAPH_ONLY" in classification:
                 return QueryType.GRAPH_ONLY
@@ -90,13 +97,10 @@ class QueryRouter:
             return QueryType.HYBRID
 
     async def aroute_with_analysis(self, query: str) -> dict:
-        """
-        Route with additional analysis details concurrently.
-        """
+        """Route with additional feature analysis."""
         query_type = await self.aroute(query)
         q_lower = query.lower()
-        
-        # Consistent professional analysis features
+
         features = {
             "has_negation": any(w in q_lower for w in ["without", "no ", "not ", "exclude"]),
             "has_ingredient_mention": any(w in q_lower for w in ["ingredient", "use", "with"]),
@@ -111,18 +115,16 @@ class QueryRouter:
 
     def _heuristic_classify(self, query: str) -> Optional[QueryType]:
         """
-        Deterministic keyword routing for common patterns. 
-        Minimizes latency for obvious queries.
+        Fast keyword-based routing for common patterns.
+        Returns None for ambiguous queries (triggers LLM fallback).
         """
         q = query.lower()
-        
-        # Obvious Graph-heavy patterns
+
         graph_triggers = [
             "without", "no ", "not ", "exclude", "list recipes with",
             "ingredients for", "no meat", "vegan", "vegetarian"
         ]
-        
-        # Obvious Vector-heavy patterns
+
         vector_triggers = [
             "how to", "how do i", "steps to", "instructions", "prepare",
             "cook", "what is"
@@ -135,5 +137,5 @@ class QueryRouter:
             return QueryType.GRAPH_ONLY
         if has_vector and not has_graph:
             return QueryType.VECTOR_ONLY
-        
+
         return None

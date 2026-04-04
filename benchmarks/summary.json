@@ -1,14 +1,19 @@
 {
+    "evaluator_model": "gemma-4-31b-it",
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "dataset_size": 15,
     "baseline": {
-        "faithfulness": 0.8571428571428571,
-        "answer_relevancy": 0.28571428571373153
+        "faithfulness": 1.0,
+        "answer_relevancy": 0.5877
     },
     "hybrid": {
-        "faithfulness": 1.0,
-        "answer_relevancy": 0.28456934282070445
+        "faithfulness": 0.9922,
+        "answer_relevancy": 0.578
     },
-    "improvements": {
-        "faithfulness_pct": 16.666666666666675,
-        "answer_relevancy_pct": -0.40073001256025753
+    "delta": {
+        "faithfulness_abs": -0.0078,
+        "answer_relevancy_abs": -0.0097,
+        "faithfulness_pct": -0.78,
+        "answer_relevancy_pct": -1.65
     }
 }

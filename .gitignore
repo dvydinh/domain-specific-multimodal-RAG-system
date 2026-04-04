@@ -11,7 +11,7 @@ build/
 venv/
 .venv/
 
-# Environment variables
+# Environment variables (contains API keys)
 .env
 .env.local
 
@@ -34,7 +34,7 @@ data/.ingestion_checkpoint.json
 models/
 .cache/
 
-# Logs
+# Logs and runtime traces
 *.log
 logs/
 tmp/
@@ -51,6 +51,10 @@ neo4j_data/
 .ipynb_checkpoints/
 
 # Test artifacts
-*out.txt
-*out*.txt
 .pytest_cache/
+htmlcov/
+*.cover
+
+# Debug/scratch files (should never be committed)
+available_models*.txt
+*_error*.log

@@ -1,0 +1,41 @@
+# === Core API Framework (2026 Standards) ===
+fastapi>=0.120.0
+uvicorn[standard]>=0.40.0
+pydantic>=2.10.0
+pydantic-settings>=2.5.0
+
+# === Large Language Models & Orchestration (2026 Standards) ===
+langchain>=0.4.0
+langchain-community>=0.4.0
+langchain-core>=0.4.0
+langchain-google-genai>=2.0.0  # Supports Gemini 3.1 series
+google-generativeai>=0.10.0      # Native SDK for 2026 Models
+
+# === Vector & Graph Databases ===
+qdrant-client>=1.15.0
+fastembed>=0.5.0
+neo4j>=5.30.0
+
+# === Multimodal Embeddings & Vision ===
+sentence-transformers>=3.5.0
+transformers>=4.50.0
+torch>=2.5.0
+open-clip-torch>=2.30.0
+FlagEmbedding>=1.5.0
+Pillow>=11.0.0
+
+# === Document Extraction (PDF/Multimodal) ===
+PyMuPDF>=1.30.0
+pdfplumber>=0.12.0
+
+# === Evaluation & MLOps ===
+ragas>=0.2.5
+datasets>=3.0.0
+
+# === Utilities & Testing ===
+python-dotenv>=1.0.1
+httpx>=0.30.0
+tenacity>=9.0.0
+pytest>=9.0.0
+pytest-asyncio>=0.25.0
+pandas>=2.5.0

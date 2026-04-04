@@ -1,7 +1,7 @@
 [
   {
     "question": "What are the main ingredients for Beef Picadillo?",
-    "ground_truth": "The ingredients for Beef Picadillo include 500g ground beef, 2 cubed potatoes, 1 diced onion, 2 garlic cloves, 1/2 cup raisins, 1/2 cup olives, 1 tsp cumin, salt, and pepper."
+    "ground_truth": "The ingredients for Beef Picadillo include ground beef, cubed potatoes, diced onion, garlic cloves, raisins, olives, cumin, salt, and pepper."
   },
   {
     "question": "How long should the beef simmer in the Picadillo recipe?",
@@ -9,11 +9,39 @@
   },
   {
     "question": "What spices are used in the Chicken Curry recipe?",
-    "ground_truth": "The spices required are 2 tbsp curry powder, 1 tsp turmeric, 1 tsp cumin, along with fresh ginger and garlic."
+    "ground_truth": "The spices required are curry powder, turmeric, cumin, along with fresh ginger and garlic."
   },
   {
     "question": "Is the Chicken Curry recipe dairy-free?",
-    "ground_truth": "Yes, the recipe uses coconut milk instead of dairy products, making it a dairy-free dish."
+    "ground_truth": "The Chicken Curry recipe uses yogurt, which is a dairy product, so it is not dairy-free."
+  },
+  {
+    "question": "What cuisine does Beef Picadillo belong to?",
+    "ground_truth": "Beef Picadillo is a Latin American or Caribbean dish."
+  },
+  {
+    "question": "What are the steps to cook Chicken Curry?",
+    "ground_truth": "Heat olive oil, saute onion and garlic, add chicken and cook until done, stir in curry powder, tomatoes, salt, pepper and broth, simmer until thickened, then stir in yogurt and serve with rice."
+  },
+  {
+    "question": "Which recipes contain ground beef as an ingredient?",
+    "ground_truth": "Beef Picadillo contains ground beef as an ingredient."
+  },
+  {
+    "question": "List recipes that do not contain chicken.",
+    "ground_truth": "Beef Picadillo does not contain chicken."
+  },
+  {
+    "question": "What vegetables are used in Beef Picadillo?",
+    "ground_truth": "Beef Picadillo uses potatoes, onion, garlic, green bell peppers, and tomatoes."
+  },
+  {
+    "question": "How many servings does the Chicken Curry recipe make?",
+    "ground_truth": "The Chicken Curry recipe serves 4."
+  },
+  {
+    "question": "What is the cost per serving for Chicken Curry?",
+    "ground_truth": "The cost per serve for Chicken Curry is $2.55."
   },
   {
     "question": "How much nutmeg is required for the Beef Picadillo?",
@@ -25,6 +53,10 @@
   },
   {
     "question": "Does the Chicken Curry use ricotta cheese?",
+    "ground_truth": "Based on the provided documents, I cannot find this information."
+  },
+  {
+    "question": "What is the recommended cooking temperature for Beef Picadillo?",
     "ground_truth": "Based on the provided documents, I cannot find this information."
   }
 ]

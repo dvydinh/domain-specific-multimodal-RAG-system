@@ -156,24 +156,28 @@ class IngestionPipeline:
                 )
                 stats["recipes_added"] += len(recipe_id_map)
 
-            # Assign recipe names to chunks
-            for chunk in page_chunks:
-                for entity in entities:
-                    if re.search(rf"\b{re.escape(entity.recipe_name.lower())}\b", chunk.text.lower()):
-                        current_recipe = entity.recipe_name
-                        break
-
             # Step 5: Embed and Store (Saga-protected)
             async def _phase_2_insert(recipe_id_map, page_chunks):
                 if page_chunks:
-                    await asyncio.to_thread(
-                        self.vector_store.embed_and_store_chunks, page_chunks, recipe_id_map
-                    )
-                if page.image_paths:
-                    image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
-                    await asyncio.to_thread(
-                        self.vector_store.embed_and_store_images, image_metadata, recipe_id_map
-                    )
+                    # Enrich chunks with recipe names using precise word boundary matching
+                    for chunk in page_chunks:
+                        chunk_lower = chunk.text.lower()
+                        for r_name in recipe_id_map.keys():
+                            # Defensive check: r_name must be a valid string for regex
+                            safe_name = str(r_name or "").lower()
+                            if not safe_name: continue
+                            
+                            if re.search(rf"\b{re.escape(safe_name)}\b", chunk_lower):
+                                chunk.recipe_name = r_name
+                                break
+                    
+                    # Execute Vector/Image embedding synchronously to prevent Threading/Namespace issues in 2026 SDKs
+                    if page_chunks:
+                        self.vector_store.embed_and_store_chunks(page_chunks, recipe_id_map)
+                    
+                    if page.image_paths:
+                        image_metadata = self._collect_image_metadata([page], pdf_name, recipe_id_map, page_chunks)
+                        self.vector_store.embed_and_store_images(image_metadata, recipe_id_map)
 
             async def _phase_2_rollback(recipe_id_map, page_chunks):
                 if recipe_id_map:

@@ -5,81 +5,60 @@ Scans text chunks and extracts structured recipe data:
 recipe names, ingredients, tags, and cuisine type.
 
 Rate-limited to respect Google AI free tier (15 RPM).
-Using manual JSON parsing to bypass LangChain with_structured_output bugs
-with newer Gemini 3.1-flash-preview schemas.
+Uses defensive JSON parsing to handle LLM output variations.
 """
 
 import logging
 import asyncio
-import json
-import re
 from typing import Optional
 from tenacity import retry, stop_after_attempt, wait_exponential
-import os
-from dotenv import load_dotenv
 
-# Force load API Key and Model from .env file
-load_dotenv()
+from langchain_core.messages import HumanMessage, SystemMessage
 from backend.config import get_settings
 from backend.models import ExtractedEntity, Ingredient, Tag
-from langchain_google_genai import HarmCategory, HarmBlockThreshold
-from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.messages import HumanMessage, SystemMessage
+from backend.utils.llm_factory import LLMFactory
+from backend.utils.json_parser import extract_json, extract_text_content
 
 logger = logging.getLogger(__name__)
 
-SYSTEM_PROMPT = """You are a culinary data extraction specialist. Your job is to analyze
-text passages from cooking books and extract structured recipe information.
+SYSTEM_PROMPT = """You are a strictly reliable Culinary Information Extractor. 
+Extract recipes, ingredients, and tags from the provided text.
 
-OUTPUT FORMAT REQUIREMENTS:
-You MUST output ONLY a valid JSON object matching the exact internal structure below.
-Do not include any conversational text, markdown formatting blocks (like ```json), or trailing commas.
+OUTPUT RULE: 
+Return ONLY the JSON object. 
+If no recipe is found, return {"recipes": []}.
 
-EXPECTED JSON SCHEMA:
+JSON STRUCTURE:
 {
   "recipes": [
     {
-      "recipe_name": "string (Name of the recipe/dish)",
-      "cuisine": "string (Cuisine type, e.g., Japanese, Italian, Vietnamese)",
-      "ingredients": [
-        {
-          "name": "string (Ingredient name in lowercase)",
-          "quantity": "string (Amount, e.g., '200g', '2 cups')",
-          "unit": "string (Unit of measurement)"
-        }
-      ],
-      "tags": [
-        "string (Classification tags: Vegan, Vegetarian, Spicy, Gluten-Free, meal type, etc.)"
-      ]
+      "recipe_name": "string",
+      "cuisine": "string",
+      "ingredients": [{"name": "string", "quantity": "string", "unit": "string"}],
+      "tags": ["string"]
     }
   ]
-}
-
-Rules:
-- Normalize ingredient names to lowercase English
-- Extract all recipes mentioned
-- Return {"recipes": []} if nothing is found."""
+}"""
 
 
 class EntityExtractor:
     """
-    Extracts recipe entities from text using Google Gemini.
-    Rate-limited and production-hardened with non-blocking async execution.
+    Extracts structured recipe entities from text using an LLM.
+
+    Detects recipe names, ingredients (with quantities), cuisine tags,
+    and dietary labels. Uses batched processing with rate limiting
+    to stay within API quotas.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         settings = get_settings()
-
-        self.llm = ChatGoogleGenerativeAI(
-            model=os.getenv("GOOGLE_MODEL", "gemini-3.1-flash-preview"),
-            google_api_key=os.getenv("GOOGLE_API_KEY"),
-            temperature=0,
-            max_retries=1,
-            timeout=60,
+        self.llm = LLMFactory.get_llm(
+            model_name=model or settings.google_model,
+            temperature=0.0,
+            max_tokens=2000,
         )
-
-        self._cooldown = settings.api_cooldown_seconds
         self._batch_size = settings.entity_batch_size
+        self._cooldown = settings.api_cooldown_seconds
 
     @retry(
         wait=wait_exponential(multiplier=1, min=4, max=60),
@@ -87,7 +66,7 @@ class EntityExtractor:
         reraise=True,
     )
     async def aextract(self, text: str) -> list[ExtractedEntity]:
-        """Extract entities asynchronously with production-grade retries."""
+        """Extract entities from a text chunk with exponential backoff retries."""
         if not text or len(text.strip()) < 20:
             return []
 
@@ -98,10 +77,7 @@ class EntityExtractor:
 
         try:
             response = await self.llm.ainvoke(messages)
-            raw_text = response.content
-
-            # Multi-layer defensive JSON extraction
-            from backend.utils.json_parser import extract_json
+            raw_text = extract_text_content(response.content)
             data = extract_json(raw_text, fallback={"recipes": []})
             return self._parse_result(data)
         except Exception as e:
@@ -109,52 +85,70 @@ class EntityExtractor:
             raise
 
     def _parse_result(self, result: dict) -> list[ExtractedEntity]:
-        """Convert parsed JSON to Pydantic models."""
+        """Convert parsed JSON to Pydantic models with defensive type checking."""
         entities = []
         for recipe_data in result.get("recipes", []):
+            if not isinstance(recipe_data, dict):
+                continue
+
             try:
-                ingredients = [
-                    Ingredient(
-                        name=ing.get("name", "").lower().strip(),
-                        quantity=ing.get("quantity"),
-                        unit=ing.get("unit"),
-                    )
-                    for ing in recipe_data.get("ingredients", [])
-                    if isinstance(ing, dict) and ing.get("name")
-                ]
-                tags = [Tag(name=tag.strip()) for tag in recipe_data.get("tags", []) if isinstance(tag, str)]
-                
-                entities.append(ExtractedEntity(
-                    recipe_name=recipe_data.get("recipe_name", "Unknown Recipe"),
-                    ingredients=ingredients,
-                    tags=tags,
-                    cuisine=recipe_data.get("cuisine"),
-                ))
-            except Exception:
+                raw_name = recipe_data.get("recipe_name")
+                recipe_name = str(raw_name).strip() if raw_name else "Unknown Recipe"
+
+                ingredients = []
+                for ing in recipe_data.get("ingredients", []):
+                    if not isinstance(ing, dict):
+                        continue
+                    name = ing.get("name")
+                    if name and isinstance(name, str):
+                        ingredients.append(Ingredient(
+                            name=name.lower().strip(),
+                            quantity=str(ing.get("quantity") or ""),
+                            unit=str(ing.get("unit") or ""),
+                        ))
+
+                tags = []
+                for tag in recipe_data.get("tags", []):
+                    if isinstance(tag, str) and tag.strip():
+                        tags.append(Tag(name=tag.strip()))
+
+                if ingredients:
+                    entities.append(ExtractedEntity(
+                        recipe_name=recipe_name,
+                        ingredients=ingredients,
+                        tags=tags,
+                        cuisine=str(recipe_data.get("cuisine") or "International"),
+                    ))
+            except Exception as e:
+                logger.warning(f"Skipping malformed recipe entry: {e}")
                 continue
         return entities
 
     async def aextract_batch(self, texts: list[str]) -> list[ExtractedEntity]:
-        """Process batches asynchronously with non-blocking cooldowns."""
+        """Process text chunks in batches with rate-limited cooldowns."""
         all_entities = []
         seen_names = set()
-        
+
         for i in range(0, len(texts), self._batch_size):
+            batch_num = i // self._batch_size + 1
+            total_batches = (len(texts) + self._batch_size - 1) // self._batch_size
+            logger.info(f"Entity extraction batch {batch_num}/{total_batches}")
+
             batch = texts[i:i + self._batch_size]
             combined = "\n\n---\n\n".join(batch)
-            
+
             try:
                 entities = await self.aextract(combined)
                 for entity in entities:
-                    normalized = entity.recipe_name.lower().strip()
+                    name = entity.recipe_name or "Unknown Recipe"
+                    normalized = name.lower().strip()
                     if normalized not in seen_names:
                         seen_names.add(normalized)
                         all_entities.append(entity)
             except Exception as e:
-                logger.error(f"Batch failed: {e}")
+                logger.error(f"Batch {batch_num} failed: {e}")
 
             if i + self._batch_size < len(texts):
-                # Non-blocking async sleep — CRITICAL for production API performance
                 await asyncio.sleep(self._cooldown)
 
         return all_entities
