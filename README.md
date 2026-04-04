@@ -29,7 +29,7 @@ flowchart TD
     end
 
     subgraph Orchestration & Routing
-        R{Query Router\n(Heuristic + LLM)}
+        R{"Query Router<br>(Heuristic + LLM)"}
         Q --> R
     end
 
@@ -43,14 +43,14 @@ flowchart TD
         R -- Vector Only --> V
         
         R -- Hybrid Route --> G
-        R -- Hybrid Route --> V_Fetch[Unfiltered Fetch:\nTop-K * 5]
+        R -- Hybrid Route --> V_Fetch["Unfiltered Fetch:<br>Top-K * 5"]
         V_Fetch --> V
         V --> Unfiltered_Contexts[30 Raw Chunks]
-        G --> Validated_IDs[Entity IDs\n(Constraints)]
+        G --> Validated_IDs["Entity IDs<br>(Constraints)"]
     end
 
     subgraph Soft Filtering & Reranking
-        Reranker[Cross-Encoder Reranker\nBAAI/bge-reranker-v2-m3]
+        Reranker["Cross-Encoder Reranker<br>BAAI/bge-reranker-v2-m3"]
         Unfiltered_Contexts --> Reranker
         Validated_IDs -- "+5.0 Scalar Boost" --> Reranker
         Reranker --> TopK_Contexts[Ranked Top-K Contexts]
@@ -73,7 +73,7 @@ The system replaces traditional Boolean Intersection search methodologies (e.g.,
 ### 2.1 Unconstrained Dense Retrieval
 The vector engine (Qdrant) retrieves an expanded boundary set of $N$ documents using standard cosine similarity:
 $$ \text{sim}(Q, D) = \frac{\mathbf{q} \cdot \mathbf{d}}{\|\mathbf{q}\| \|\mathbf{d}\|} $$
-Where $N = 30$ (calculated as $Top\_K \times 5$). 
+Where $N = 30$ (calculated as $TopK \times 5$). 
 
 ### 2.2 Graph-Augmented Reranker Boosting (Soft Filtering)
 Instead of pruning documents $D$ that do not exist within the extracted Knowledge Graph subset $G_q$, the reranking score $S(Q, D)$ is modified by the intersection identity:
