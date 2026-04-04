@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 
 class TraceLogger:
     """
-    Simplified Production-Ready Observability.
+    Lightweight query lifecycle logger.
     
-    Captures the lifecycle of a RAG query for professional telemetry 
-    and debugging (OpenTelemetry compatible architecture).
+    Writes structured JSON trace events to disk for debugging
+    and post-hoc analysis of RAG pipeline performance.
     """
     
     def __init__(self, log_file: str = "logs/traces.json"):

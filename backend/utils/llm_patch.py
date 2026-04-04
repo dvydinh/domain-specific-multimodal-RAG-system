@@ -1,12 +1,11 @@
 """
-Monkey patch utilities to handle framework-specific conflicts.
+Monkey patch for RAGAS + ChatGoogleGenerativeAI compatibility.
 
-Justification (Senior AI Engineer standard):
-VERSION CONSTRAINTS: RAGAS v0.1.20 | google-generative-ai 1.0.8
+RAGAS v0.1.20 injects a 'temperature' kwarg into _agenerate() calls,
+which conflicts with ChatGoogleGenerativeAI's internal validation.
+This patch strips the conflicting kwarg before it reaches the SDK.
 
-This monkey patch is a temporary workaround (Anti-pattern mitigation) to bypass 
-a redundant temperature parameter override in RAGAS 0.1.20, which conflicts 
-with the strict internal validation of ChatGoogleGenerativeAI.
+Remove this patch when RAGAS updates its Google AI integration.
 """
 
 import logging
@@ -22,8 +21,7 @@ def apply_gemini_ragas_patch():
     original_agenerate = ChatGoogleGenerativeAI._agenerate
 
     async def patched_agenerate(self, *args, **kwargs):
-        # Professional mitigation: bypass validation logic by cleaning parameters 
-        # before the final generation call.
+        # Strip temperature from kwargs to prevent validation conflict
         gen_kwargs = self._get_ls_params() if hasattr(self, '_get_ls_params') else {}
         if "temperature" in gen_kwargs:
             del gen_kwargs["temperature"]
@@ -32,4 +30,4 @@ def apply_gemini_ragas_patch():
         return await original_agenerate(self, *args, **kwargs)
 
     ChatGoogleGenerativeAI._agenerate = patched_agenerate
-    logger.info("PATCH APPLIED: Managed compatibility workaround for RAGAS evaluation.")
+    logger.info("Applied RAGAS compatibility patch (stripped temperature kwarg)")

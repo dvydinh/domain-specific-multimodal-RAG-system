@@ -4,17 +4,21 @@ LLM response synthesizer with citation support.
 Combines graph context (recipe metadata, ingredients) and vector context
 (instruction text, images) into a single LLM prompt, generating a response
 with inline citations [1], [2], etc.
+
+Supports both synchronous and SSE streaming response modes.
 """
 
+import json as _json
 import logging
 from typing import Optional
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import retry, stop_after_attempt, wait_exponential
 
-from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import get_settings
 from backend.models import QueryResponse, Citation
+from backend.utils.llm_factory import LLMFactory
+from backend.utils.json_parser import extract_text_content
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +43,16 @@ Format your response with clear sections when appropriate:
 
 class ResponseSynthesizer:
     """
-    Generates final responses by combining retrieval contexts with LLM synthesis.
-
-    Takes the output of hybrid retrieval (graph results + vector results)
-    and produces a coherent, cited response.
+    Generates cited responses by combining retrieval results with LLM synthesis.
+    Supports both batch (asynthesize) and streaming (asynthesize_stream) modes.
     """
 
     def __init__(self, api_key: Optional[str] = None, model: Optional[str] = None):
         settings = get_settings()
-        self.llm = ChatGoogleGenerativeAI(
-            api_key=api_key or settings.google_api_key,
-            model=model or settings.google_model,
+        self.llm = LLMFactory.get_llm(
+            model_name=model or settings.google_model,
             temperature=0.3,
-            max_output_tokens=2000,
+            max_tokens=2000,
         )
 
     @retry(
@@ -65,7 +66,7 @@ class ResponseSynthesizer:
     )
     async def asynthesize(self, query: str, retrieval_results: dict) -> QueryResponse:
         """
-        Generate a response with citations from retrieval results asynchronously.
+        Generate a response with citations from retrieval results.
 
         Args:
             query: Original user question.
@@ -74,7 +75,6 @@ class ResponseSynthesizer:
         Returns:
             QueryResponse with response text, citations, and metadata.
         """
-        # Build context string and citation map
         context_parts, citations = self._build_context(retrieval_results)
 
         if not context_parts:
@@ -88,7 +88,6 @@ class ResponseSynthesizer:
 
         context_str = "\n\n".join(context_parts)
 
-        # Build the LLM prompt
         messages = [
             SystemMessage(content=SYNTHESIS_SYSTEM_PROMPT),
             HumanMessage(content=(
@@ -101,7 +100,9 @@ class ResponseSynthesizer:
 
         try:
             response = await self.llm.ainvoke(messages)
-            response_text = response.content.strip()
+            response_text = extract_text_content(response.content)
+            if not response_text:
+                response_text = "I'm sorry, I couldn't generate a coherent response from the context."
         except Exception as e:
             logger.error(f"LLM synthesis failed: {e}")
             response_text = "An error occurred while generating the response."
@@ -118,7 +119,7 @@ class ResponseSynthesizer:
         self, retrieval_results: dict
     ) -> tuple[list[str], dict[str, Citation]]:
         """
-        Build numbered context entries and citation objects.
+        Build numbered context entries and citation objects from retrieval results.
 
         Merges graph results (recipe metadata) and vector results (text chunks)
         into a unified, numbered context for the LLM.
@@ -132,7 +133,6 @@ class ResponseSynthesizer:
             recipe_name = recipe.get("name", "Unknown Recipe")
             cuisine = recipe.get("cuisine", "")
 
-            # Build ingredient list if available
             ingredients = recipe.get("ingredients", [])
             if isinstance(ingredients, list) and ingredients:
                 ing_str = ", ".join(
@@ -175,7 +175,6 @@ class ResponseSynthesizer:
             )
             context_parts.append(ctx)
 
-            # Find matching image for this recipe
             image_url = self._find_matching_image(
                 result.get("neo4j_recipe_id", ""),
                 retrieval_results.get("image_results", []),
@@ -210,18 +209,16 @@ class ResponseSynthesizer:
 
     async def asynthesize_stream(self, query: str, retrieval_results: dict):
         """
-        Stream LLM tokens via Server-Sent Events for real-time UX.
-        
+        Stream LLM tokens via Server-Sent Events.
+
         Yields JSON-encoded SSE events:
-          1. {"event": "metadata", "data": {...}} — retrieval stats (instant)
-          2. {"event": "token", "data": "..."} — each LLM token chunk
+          1. {"event": "metadata", "data": {...}} — retrieval stats
+          2. {"event": "token", "data": "..."} — each LLM token
           3. {"event": "done", "data": {...}} — citations and completion
         """
-        import json as _json
-
         context_parts, citations = self._build_context(retrieval_results)
 
-        # Yield metadata immediately (user sees retrieval stats while LLM thinks)
+        # Yield metadata immediately
         metadata = {
             "query_type": retrieval_results.get("query_type", "hybrid"),
             "graph_results_count": len(retrieval_results.get("graph_results", [])),
@@ -248,14 +245,14 @@ class ResponseSynthesizer:
 
         try:
             async for chunk in self.llm.astream(messages):
-                token = chunk.content
+                token = extract_text_content(chunk.content)
                 if token:
                     yield f"data: {_json.dumps({'event': 'token', 'data': token})}\n\n"
         except Exception as e:
             logger.error(f"LLM streaming failed: {e}")
             yield f"data: {_json.dumps({'event': 'token', 'data': 'An error occurred while generating the response.'})}\n\n"
 
-        # Yield citations as final event
+        # Final event: citations
         citations_serializable = {
             k: v.model_dump() for k, v in citations.items()
         }

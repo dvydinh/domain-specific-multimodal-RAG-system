@@ -20,8 +20,7 @@ class Settings(BaseSettings):
 
     # --- Google AI API ---
     google_api_key: str = Field(default="")
-    google_model: str = Field(default="gemini-3.1-flash-lite-preview")
-
+    google_model: str = Field(default="gemini-2.0-flash")
 
     # --- Neo4j ---
     neo4j_uri: str = Field(default="bolt://localhost:7687")
@@ -35,7 +34,7 @@ class Settings(BaseSettings):
     qdrant_image_collection: str = Field(default="recipe_images")
 
     # --- Embedding Models ---
-    text_embedding_model: str = Field(default="BAAI/bge-m3")
+    text_embedding_model: str = Field(default="BAAI/bge-small-en-v1.5")
     clip_model: str = Field(default="ViT-B-32")
     clip_pretrained: str = Field(default="laion2b_s34b_b79k")
 
