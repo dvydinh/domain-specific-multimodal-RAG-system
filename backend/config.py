@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     # --- Qdrant ---
     qdrant_host: str = Field(default="localhost")
     qdrant_port: int = Field(default=6333)
+    qdrant_url: str = Field(default="")       # Qdrant Cloud URL (overrides host:port)
+    qdrant_api_key: str = Field(default="")    # Qdrant Cloud API key
     qdrant_text_collection: str = Field(default="recipe_text")
     qdrant_image_collection: str = Field(default="recipe_images")
 

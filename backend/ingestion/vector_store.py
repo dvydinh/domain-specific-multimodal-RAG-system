@@ -42,10 +42,27 @@ class VectorStoreManager:
         port: Optional[int] = None,
     ):
         settings = get_settings()
-        self.client = QdrantClient(
-            host=host or settings.qdrant_host,
-            port=port or settings.qdrant_port,
-        )
+
+        # Cloud mode: connect via URL + API key (Qdrant Cloud)
+        # Local mode: connect via host:port (Docker)
+        cloud_url = settings.qdrant_url
+        cloud_key = settings.qdrant_api_key
+
+        if cloud_url:
+            self.client = QdrantClient(
+                url=cloud_url,
+                api_key=cloud_key or None,
+            )
+            logger.info(f"Connected to Qdrant Cloud: {cloud_url[:40]}...")
+        else:
+            self.client = QdrantClient(
+                host=host or settings.qdrant_host,
+                port=port or settings.qdrant_port,
+            )
+            logger.info(
+                f"Connected to Qdrant at {host or settings.qdrant_host}:{port or settings.qdrant_port}"
+            )
+
         self.text_collection = settings.qdrant_text_collection
         self.image_collection = settings.qdrant_image_collection
 
@@ -57,10 +74,6 @@ class VectorStoreManager:
         self._clip_model = None
         self._clip_preprocess = None
         self._clip_tokenizer = None
-
-        logger.info(
-            f"Connected to Qdrant at {host or settings.qdrant_host}:{port or settings.qdrant_port}"
-        )
 
     # ================================================================
     # Collection Setup
