@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import ChatInterface from './components/ChatInterface'
 
-const API_BASE = '/api'
+const API_BASE = import.meta.env.VITE_API_URL || '/api'
 
 export default function App() {
   const [messages, setMessages] = useState([])

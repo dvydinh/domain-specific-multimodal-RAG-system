@@ -32,14 +32,14 @@ COPY --chown=raguser:raggroup data/ ./data/
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 ENV API_HOST=0.0.0.0
-ENV API_PORT=8000
+ENV API_PORT=7860
 
 USER raguser
 
-EXPOSE 8000
+EXPOSE 7860
 
 # Use python for healthcheck since curl is not available in slim images
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health')" || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:${API_PORT}/api/health')" || exit 1
 
-CMD ["uvicorn", "backend.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD uvicorn backend.api.main:app --host 0.0.0.0 --port ${PORT:-7860}
