@@ -7,6 +7,19 @@ export default function App() {
   const [messages, setMessages] = useState([])
   const [isLoading, setIsLoading] = useState(false)
   const [uploadToast, setUploadToast] = useState(null)
+  
+  const [dbFiles, setDbFiles] = useState([])
+  const [processingFiles, setProcessingFiles] = useState([])
+
+  const fetchDbFiles = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/files`)
+      const data = await res.json()
+      setDbFiles(data.files || [])
+    } catch (err) {
+      console.error('Failed to fetch files:', err)
+    }
+  }
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark')
@@ -14,9 +27,34 @@ export default function App() {
     // Auto-clear dynamic knowledge on reload
     fetch(`${API_BASE}/reset`, { method: 'DELETE' })
       .then(res => res.json())
-      .then(data => console.log('Auto-reset:', data.message))
+      .then(data => {
+        console.log('Auto-reset:', data.message)
+        setProcessingFiles([])
+        fetchDbFiles()
+      })
       .catch(err => console.error('Failed to auto-reset:', err))
   }, [])
+
+  // Polling for processing files
+  useEffect(() => {
+    if (processingFiles.length === 0) return
+    
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_BASE}/files`)
+        const data = await res.json()
+        const currentFiles = data.files || []
+        setDbFiles(currentFiles)
+        
+        // Remove files from processing if they are now in dbFiles
+        setProcessingFiles(prev => prev.filter(f => !currentFiles.includes(f)))
+      } catch (err) {
+        console.error('Polling error:', err)
+      }
+    }, 3000)
+    
+    return () => clearInterval(interval)
+  }, [processingFiles])
 
   const handleSend = async (question) => {
     const userMessage = {
@@ -117,6 +155,8 @@ export default function App() {
     const form = new FormData()
     form.append('file', file)
 
+    setProcessingFiles(prev => [...prev, file.name])
+
     try {
       const res = await fetch(`${API_BASE}/upload`, {
         method: 'POST',
@@ -126,6 +166,7 @@ export default function App() {
       setUploadToast(data.message || 'Upload accepted')
     } catch (err) {
       setUploadToast(`Upload failed: ${err.message}`)
+      setProcessingFiles(prev => prev.filter(f => f !== file.name))
     }
     setTimeout(() => setUploadToast(null), 3000)
   }
@@ -150,12 +191,41 @@ export default function App() {
         </div>
       </header>
 
-      <ChatInterface
-        messages={messages}
-        isLoading={isLoading}
-        onSend={handleSend}
-        onUpload={handleUpload}
-      />
+      <div className="main-content">
+        <aside className="sidebar">
+          <div className="sidebar__header">
+            <h3>Knowledge Base</h3>
+          </div>
+          <div className="sidebar__list">
+            {dbFiles.map(f => (
+              <div key={f} className="file-item file-item--ready">
+                <span className="file-icon">📄</span>
+                <span className="file-name" title={f}>{f}</span>
+                <span className="file-status" title="Ready">✅</span>
+              </div>
+            ))}
+            {processingFiles.map(f => (
+              <div key={f} className="file-item file-item--processing">
+                <span className="file-icon">📄</span>
+                <span className="file-name" title={f}>{f}</span>
+                <span className="file-status" title="Processing...">⏳</span>
+              </div>
+            ))}
+            {dbFiles.length === 0 && processingFiles.length === 0 && (
+              <div className="sidebar__empty">No files loaded.</div>
+            )}
+          </div>
+        </aside>
+
+        <main className="chat-main">
+          <ChatInterface
+            messages={messages}
+            isLoading={isLoading}
+            onSend={handleSend}
+            onUpload={handleUpload}
+          />
+        </main>
+      </div>
 
       {uploadToast && (
         <div className="upload-toast">{uploadToast}</div>

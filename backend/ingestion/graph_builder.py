@@ -245,6 +245,13 @@ class GraphBuilder:
             )
             return [dict(record) for record in result]
 
+    def get_all_sources(self) -> list[str]:
+        """Retrieve a list of all unique source_pdf values currently in the graph."""
+        with self._driver.session() as session:
+            result = session.run("MATCH (r:Recipe) RETURN DISTINCT r.source_pdf AS source")
+            sources = [record["source"] for record in result if record["source"]]
+            return sources
+
     def clear_graph(self):
         """Delete all nodes and relationships. Use with caution."""
         with self._driver.session() as session:

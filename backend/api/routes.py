@@ -143,6 +143,17 @@ async def list_recipes(graph: GraphBuilder = Depends(get_graph)) -> list[RecipeS
         raise HTTPException(status_code=500, detail="Failed to retrieve recipe list.")
 
 
+@router.get("/files")
+async def list_files(graph: GraphBuilder = Depends(get_graph)):
+    """List all source PDF files currently in the knowledge base."""
+    try:
+        files = graph.get_all_sources()
+        return {"files": files}
+    except Exception as e:
+        logger.error(f"Failed to list files: {e}")
+        raise HTTPException(status_code=500, detail="Failed to retrieve file list.")
+
+
 @router.get("/health")
 async def health_check(request: Request):
     """System health check (Live monitoring)."""
