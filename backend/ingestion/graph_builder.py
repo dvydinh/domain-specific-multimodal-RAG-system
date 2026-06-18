@@ -250,3 +250,33 @@ class GraphBuilder:
         with self._driver.session() as session:
             session.run("MATCH (n) DETACH DELETE n")
         logger.warning("All graph data has been deleted")
+
+    def clear_dynamic_recipes(self, keep_sources: list[str]):
+        """Delete all recipes where source_pdf is not in keep_sources."""
+        with self._driver.session() as session:
+            # Delete dynamic recipes
+            session.run(
+                """
+                MATCH (r:Recipe) 
+                WHERE NOT r.source_pdf IN $keep_sources
+                DETACH DELETE r
+                """,
+                keep_sources=keep_sources
+            )
+            # Cleanup orphaned ingredients
+            session.run(
+                """
+                MATCH (i:Ingredient)
+                WHERE NOT (i)<-[:CONTAINS_INGREDIENT]-()
+                DELETE i
+                """
+            )
+            # Cleanup orphaned tags
+            session.run(
+                """
+                MATCH (t:Tag)
+                WHERE NOT (t)<-[:HAS_TAG]-()
+                DELETE t
+                """
+            )
+        logger.info(f"Cleared dynamic recipes, kept sources: {keep_sources}")

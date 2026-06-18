@@ -235,3 +235,26 @@ async def upload_document(
         "filename": file.filename,
         "message": "File uploaded successfully. Ingestion started."
     }
+
+@router.delete("/reset")
+async def reset_dynamic_data(
+    graph: GraphBuilder = Depends(get_graph),
+    vector_store: VectorStoreManager = Depends(get_vector_store)
+):
+    """
+    Clear all dynamic user uploads, keeping only the base static files.
+    """
+    keep_sources = ["beef_picadillo.pdf", "chicken_curry.pdf"]
+    
+    try:
+        # Run synchronously since the neo4j/qdrant methods are sync
+        graph.clear_dynamic_recipes(keep_sources)
+        vector_store.clear_dynamic_vectors(keep_sources)
+        
+        return {
+            "status": "success",
+            "message": f"Cleared dynamic data. Kept static sources: {keep_sources}"
+        }
+    except Exception as e:
+        logger.error(f"Failed to reset dynamic data: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to reset dynamic data")

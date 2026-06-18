@@ -345,3 +345,30 @@ class VectorStoreManager:
             }
             for hit in results.points
         ]
+
+    def clear_dynamic_vectors(self, keep_sources: list[str]):
+        """Delete all points where source_pdf is not in keep_sources."""
+        filter_condition = qmodels.Filter(
+            must_not=[
+                qmodels.FieldCondition(
+                    key="source_pdf",
+                    match=qmodels.MatchAny(any=keep_sources),
+                )
+            ]
+        )
+        
+        # Delete from text collection
+        if self._collection_exists(self.text_collection):
+            self.client.delete(
+                collection_name=self.text_collection,
+                points_selector=qmodels.FilterSelector(filter=filter_condition)
+            )
+            
+        # Delete from image collection
+        if self._collection_exists(self.image_collection):
+            self.client.delete(
+                collection_name=self.image_collection,
+                points_selector=qmodels.FilterSelector(filter=filter_condition)
+            )
+            
+        logger.info(f"Cleared dynamic vectors, kept sources: {keep_sources}")

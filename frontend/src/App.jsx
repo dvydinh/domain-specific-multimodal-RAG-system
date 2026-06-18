@@ -10,6 +10,12 @@ export default function App() {
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', 'dark')
+    
+    // Auto-clear dynamic knowledge on reload
+    fetch(`${API_BASE}/reset`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(data => console.log('Auto-reset:', data.message))
+      .catch(err => console.error('Failed to auto-reset:', err))
   }, [])
 
   const handleSend = async (question) => {
