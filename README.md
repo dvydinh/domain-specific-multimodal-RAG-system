@@ -26,34 +26,38 @@ The pipeline orchestrates independent routing thresholds to fetch, rerank, and s
 ```mermaid
 sequenceDiagram
     actor User
-    participant Router as Query Router
-    participant Graph as Neo4j (Graph)
-    participant Vector as Qdrant (Vector)
-    participant Reranker as Cross-Encoder
-    participant LLM as Gemma-4-31B
+    participant router as router:QueryRouter
+    participant extractor as extractor:EntityExtractor
+    participant graph as graph:Neo4j
+    participant vector as vector:Qdrant
+    participant reranker as reranker:CrossEncoder
+    participant llm as synthesizer:GemmaLLM
 
-    User->>Router: Submits Query
+    User->>router: routeQuery(query)
     
     alt Hybrid Routing (Soft-Filter)
         par Parallel Retrieval
-            Router->>Graph: Extract Entities
-            Graph-->>Router: Validated Entity IDs
+            router->>extractor: extractEntities(query)
+            extractor->>graph: executeCypher(query)
+            graph-->>extractor: entityIDs
+            extractor-->>router: entityIDs
         and
-            Router->>Vector: Unfiltered Fetch (Top-K * 5)
-            Vector-->>Router: 30 Raw Context Chunks
+            router->>vector: fetchUnfiltered(query, 30)
+            vector-->>router: rawContextChunks
         end
         
-        Router->>Reranker: Send Chunks + Entity Constraints
-        Note over Reranker: Apply +5.0 Scalar Boost<br/>to chunks matching entities
-        Reranker-->>Router: Ranked Top-K Contexts
+        router->>reranker: rerank(rawContextChunks, entityIDs)
+        Note over reranker: Apply +5.0 Scalar Boost<br/>to chunks matching entities
+        reranker-->>router: rankedTopKChunks
         
-    else Single Routing (Vector or Graph)
-        Router->>Vector: Standard Fetch
-        Vector-->>Router: Top-K Contexts
+    else Single Routing
+        router->>vector: standardFetch(query, 6)
+        vector-->>router: topKChunks
     end
 
-    Router->>LLM: Contexts + Original Query
-    LLM-->>User: Zero-Hallucination Response
+    router->>llm: generateResponse(query, contextChunks)
+    llm-->>router: responseStream
+    router-->>User: responseStream
 ```
 
 ---
