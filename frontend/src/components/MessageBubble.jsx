@@ -35,6 +35,16 @@ export default function MessageBubble({ message }) {
             if (props.href?.startsWith('cit:')) {
               const citId = props.href.split(':')[1]
               const hasCitation = message.citations && message.citations[citId]
+              
+              let titleText = `Reference [${citId}]`
+              if (hasCitation) {
+                if (hasCitation.source_pdf) {
+                  titleText = `${hasCitation.source_pdf}${hasCitation.page_number ? ` (Trang ${hasCitation.page_number})` : ''}`
+                } else {
+                  titleText = `View source [${citId}]`
+                }
+              }
+
               return (
                 <span
                   className="citation-ref"
@@ -42,7 +52,7 @@ export default function MessageBubble({ message }) {
                     e.preventDefault()
                     if (hasCitation) setActiveCitation(citId)
                   }}
-                  title={hasCitation ? `View source [${citId}]` : `Reference [${citId}]`}
+                  title={titleText}
                   style={{ opacity: hasCitation ? 1 : 0.5, cursor: 'pointer', color: 'var(--primary-color)' }}
                 >
                   [{citId}]
