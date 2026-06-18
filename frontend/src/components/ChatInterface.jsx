@@ -53,7 +53,6 @@ export default function ChatInterface({ messages, isLoading, onSend, onUpload })
       <div className={`chat-messages ${isEmpty ? 'chat-messages--empty' : ''}`}>
         {isEmpty ? (
           <div className="welcome">
-            <div className="welcome__visual" />
             <h1 className="welcome__title">What would you like to cook?</h1>
             <p className="welcome__desc">
               Ask about recipes, ingredients, or cooking techniques.
