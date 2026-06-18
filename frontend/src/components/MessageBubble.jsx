@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import CitationPopup from './CitationPopup'
 
 /**
@@ -12,28 +14,48 @@ export default function MessageBubble({ message }) {
   const renderContent = () => {
     if (isUser) return message.content
 
-    // Parse citation markers [1], [2], etc.
-    const parts = message.content.split(/(\[\d+\])/g)
+    if (!message.content) {
+      return (
+        <div className="loading-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      )
+    }
 
-    return parts.map((part, idx) => {
-      const match = part.match(/^\[(\d+)\]$/)
-      if (match) {
-        const citId = match[1]
-        const hasCitation = message.citations && message.citations[citId]
-        return (
-          <span
-            key={idx}
-            className="citation-ref"
-            onClick={() => hasCitation && setActiveCitation(citId)}
-            title={hasCitation ? `View source [${citId}]` : `Reference [${citId}]`}
-            style={{ opacity: hasCitation ? 1 : 0.5 }}
-          >
-            {citId}
-          </span>
-        )
-      }
-      return <span key={idx}>{part}</span>
-    })
+    // Preprocess citation markers [1], [2], etc., so ReactMarkdown parses them as links
+    const processedContent = message.content.replace(/\[(\d+)\]/g, '[$1](cit:$1)')
+
+    return (
+      <ReactMarkdown 
+        remarkPlugins={[remarkGfm]}
+        components={{
+          a: ({ node, ...props }) => {
+            if (props.href?.startsWith('cit:')) {
+              const citId = props.href.split(':')[1]
+              const hasCitation = message.citations && message.citations[citId]
+              return (
+                <span
+                  className="citation-ref"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    if (hasCitation) setActiveCitation(citId)
+                  }}
+                  title={hasCitation ? `View source [${citId}]` : `Reference [${citId}]`}
+                  style={{ opacity: hasCitation ? 1 : 0.5, cursor: 'pointer', color: 'var(--primary-color)' }}
+                >
+                  [{citId}]
+                </span>
+              )
+            }
+            return <a {...props} />
+          }
+        }}
+      >
+        {processedContent}
+      </ReactMarkdown>
+    )
   }
 
   const getQueryTypeBadge = () => {

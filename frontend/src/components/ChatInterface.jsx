@@ -77,20 +77,6 @@ export default function ChatInterface({ messages, isLoading, onSend, onUpload })
             {messages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
-            {isLoading && (
-              <div className="message message--assistant">
-                <div className="message__avatar">
-                  <img src="/strawberry.png" alt="AI" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
-                </div>
-                <div className="message__content">
-                  <div className="loading-dots">
-                    <span></span>
-                    <span></span>
-                    <span></span>
-                  </div>
-                </div>
-              </div>
-            )}
           </>
         )}
         <div ref={messagesEndRef} />
