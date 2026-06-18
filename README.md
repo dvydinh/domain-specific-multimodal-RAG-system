@@ -24,45 +24,36 @@ This paper proposes a **Soft Filtering Cross-Encoder Pipeline**. By entirely byp
 The pipeline orchestrates independent routing thresholds to fetch, rerank, and synthesize data. At its core, the Reranker acts as the crucial unification layer between graph heuristics and latent semantic vectors.
 
 ```mermaid
-flowchart TD
-    subgraph Client Layer
-        Q[User Query]
-    end
+sequenceDiagram
+    actor User
+    participant Router as Query Router
+    participant Graph as Neo4j (Graph)
+    participant Vector as Qdrant (Vector)
+    participant Reranker as Cross-Encoder
+    participant LLM as Gemma-4-31B
 
-    subgraph Orchestration & Routing
-        R{"Query Router<br>(Heuristic + LLM)"}
-        Q --> R
-    end
-
-    subgraph Data Stores
-        G[(Neo4j\nKnowledge Graph)]
-        V[(Qdrant\nVector DB)]
-    end
-
-    subgraph Retrieval Pipeline
-        R -- Graph Only --> G
-        R -- Vector Only --> V
+    User->>Router: Submits Query
+    
+    alt Hybrid Routing (Soft-Filter)
+        par Parallel Retrieval
+            Router->>Graph: Extract Entities
+            Graph-->>Router: Validated Entity IDs
+        and
+            Router->>Vector: Unfiltered Fetch (Top-K * 5)
+            Vector-->>Router: 30 Raw Context Chunks
+        end
         
-        R -- Hybrid Route --> G
-        R -- Hybrid Route --> V_Fetch["Unfiltered Fetch:<br>Top-K * 5"]
-        V_Fetch --> V
-        V --> Unfiltered_Contexts[30 Raw Chunks]
-        G --> Validated_IDs["Entity IDs<br>(Constraints)"]
+        Router->>Reranker: Send Chunks + Entity Constraints
+        Note over Reranker: Apply +5.0 Scalar Boost<br/>to chunks matching entities
+        Reranker-->>Router: Ranked Top-K Contexts
+        
+    else Single Routing (Vector or Graph)
+        Router->>Vector: Standard Fetch
+        Vector-->>Router: Top-K Contexts
     end
 
-    subgraph Soft Filtering & Reranking
-        Reranker["Cross-Encoder Reranker<br>BAAI/bge-reranker-v2-m3"]
-        Unfiltered_Contexts --> Reranker
-        Validated_IDs -- "+5.0 Scalar Boost" --> Reranker
-        Reranker --> TopK_Contexts[Ranked Top-K Contexts]
-    end
-
-    subgraph Generative Synthesis
-        LLM[Gemma-4-31B-IT]
-        TopK_Contexts --> LLM
-        Q --> LLM
-        LLM --> Response[Zero-Hallucination Response]
-    end
+    Router->>LLM: Contexts + Original Query
+    LLM-->>User: Zero-Hallucination Response
 ```
 
 ---
