@@ -1,11 +1,12 @@
 # Graph-Augmented Soft Filtering: Mitigating Recall Degradation in High-Precision Multimodal RAG Systems
 
+**Live Deployment:** [https://domain-specific-multimodal-rag-syst.vercel.app/](https://domain-specific-multimodal-rag-syst.vercel.app/)
+
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.120.0-009688.svg?style=flat)](https://fastapi.tiangolo.com)
 [![Qdrant](https://img.shields.io/badge/Qdrant-Vector_Database-FF5252.svg)](https://qdrant.tech/)
 [![Neo4j](https://img.shields.io/badge/Neo4j-Knowledge_Graph-018bff.svg)](https://neo4j.com/)
 [![LLM (Gemma)](https://img.shields.io/badge/Evaluator-Gemma--4--31B-black)](https://deepmind.google/technologies/gemma/)
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel-000000.svg?logo=vercel)](https://domain-specific-multimodal-rag-syst.vercel.app/)
 
 **Notice to Reviewers / Big Tech Evaluators:** This repository contains an empirical ML pipeline aimed at resolving the fundamental Precision-Recall trade-off in Retrieval-Augmented Generation (RAG) paradigms. All benchmark statistics provided herein are deterministically derived from live testing logs (`benchmarks/summary.json`). No metrics have been artificially mocked.
 
