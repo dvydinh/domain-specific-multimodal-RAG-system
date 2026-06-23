@@ -196,7 +196,10 @@ def _check_qdrant() -> str:
     try:
         from qdrant_client import QdrantClient
         settings = get_settings()
-        client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
+        if settings.qdrant_url:
+            client = QdrantClient(url=settings.qdrant_url, api_key=settings.qdrant_api_key or None)
+        else:
+            client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
         client.get_collections()
         return "up"
     except Exception:
