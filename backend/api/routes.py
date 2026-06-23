@@ -259,16 +259,29 @@ async def reset_dynamic_data(
     Clear all dynamic user uploads, keeping only the base static files.
     """
     keep_sources = ["beef_picadillo.pdf", "chicken_curry.pdf"]
+    errors = []
     
     try:
-        # Run synchronously since the neo4j/qdrant methods are sync
         graph.clear_dynamic_recipes(keep_sources)
-        vector_store.clear_dynamic_vectors(keep_sources)
-        
-        return {
-            "status": "success",
-            "message": f"Cleared dynamic data. Kept static sources: {keep_sources}"
-        }
     except Exception as e:
-        logger.error(f"Failed to reset dynamic data: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to reset dynamic data")
+        logger.error(f"Failed to clear graph: {e}", exc_info=True)
+        errors.append(f"graph: {str(e)}")
+    
+    try:
+        vector_store.clear_dynamic_vectors(keep_sources)
+    except Exception as e:
+        logger.error(f"Failed to clear vectors: {e}", exc_info=True)
+        errors.append(f"vectors: {str(e)}")
+    
+    if errors:
+        return {
+            "status": "partial",
+            "message": f"Reset completed with errors: {'; '.join(errors)}",
+            "kept_sources": keep_sources
+        }
+    
+    return {
+        "status": "success",
+        "message": f"Cleared dynamic data. Kept static sources: {keep_sources}"
+    }
+
