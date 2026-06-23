@@ -348,6 +348,18 @@ class VectorStoreManager:
 
     def clear_dynamic_vectors(self, keep_sources: list[str]):
         """Delete all points where source_pdf is not in keep_sources."""
+        # Qdrant Cloud requires a keyword index on filtered fields
+        for coll in [self.text_collection, self.image_collection]:
+            if self._collection_exists(coll):
+                try:
+                    self.client.create_payload_index(
+                        collection_name=coll,
+                        field_name="source_pdf",
+                        field_schema=qmodels.PayloadSchemaType.KEYWORD,
+                    )
+                except Exception:
+                    pass  # Index already exists
+        
         filter_condition = qmodels.Filter(
             must_not=[
                 qmodels.FieldCondition(
@@ -372,3 +384,4 @@ class VectorStoreManager:
             )
             
         logger.info(f"Cleared dynamic vectors, kept sources: {keep_sources}")
+
